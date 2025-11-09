@@ -1,0 +1,26 @@
+{
+  "name": "firebase-functions",
+  "version": "1.0.0",
+  "description": "Cloud Functions for Firebase",
+  "engines": {
+    "node": "20"
+  },
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0",
+    "firebase-admin": "^13.0.1",
+    "firebase-functions": "^6.2.0"
+  },
+  "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
+    "typescript": "^5.7.2"
+  },
+  "private": true
+}
