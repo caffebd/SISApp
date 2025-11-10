@@ -6,9 +6,10 @@ import DropdownOptionsModal from './DropdownOptionsModal';
 
 interface CertificateBuilderProps {
   userId: string;
+  preview?: boolean;
 }
 
-export default function CertificateBuilder({ userId }: CertificateBuilderProps) {
+export default function CertificateBuilder({ userId, preview = false }: CertificateBuilderProps) {
   const [elements, setElements] = useState<FormElement[]>([]);
   const [draggedType, setDraggedType] = useState<ElementType | null>(null);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
@@ -181,11 +182,18 @@ export default function CertificateBuilder({ userId }: CertificateBuilderProps) 
     
     const element = elements.find(el => el.id === elementId);
     if (!element) return;
-    
+    const elementDiv = document.getElementById(`element-${elementId}`);
+    if (!elementDiv) return;
+
+    // Use the element's viewport rect to calculate the mouse offset
+    // relative to the element's top-left. This keeps client coordinates
+    // consistent with the getBoundingClientRect() used in mouse move.
+    const elemRect = elementDiv.getBoundingClientRect();
+
     setDraggingElement(elementId);
     setDragOffset({
-      x: e.clientX - element.position.x,
-      y: e.clientY - element.position.y
+      x: e.clientX - elemRect.left,
+      y: e.clientY - elemRect.top,
     });
   };
 
@@ -249,7 +257,8 @@ export default function CertificateBuilder({ userId }: CertificateBuilderProps) 
   return (
     <div className="flex h-[calc(100vh-73px)]">
       {/* Left Toolbox */}
-      <div className="w-64 bg-white border-r border-gray-200 p-4">
+      {!preview && (
+        <div className="w-64 bg-white border-r border-gray-200 p-4">
         <h2 className="text-lg font-bold text-gray-900 mb-4">Form Elements</h2>
         <div className="space-y-2">
           {toolboxItems.map((item) => (
@@ -264,13 +273,14 @@ export default function CertificateBuilder({ userId }: CertificateBuilderProps) 
             </div>
           ))}
         </div>
-        
+
         <div className="mt-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-sm text-blue-800">
             <strong>Tip:</strong> Drag elements from here onto the canvas to build your certificate.
           </p>
         </div>
       </div>
+      )}
 
       {/* Main Canvas */}
       <div className="flex-1 p-6 overflow-auto">
@@ -296,110 +306,136 @@ export default function CertificateBuilder({ userId }: CertificateBuilderProps) 
 
           {elements.map((element) => {
             const elementWidth = elementWidths[element.id] || 400;
-            
+            const isInteractive = !preview;
+
             return (
               <div
                 key={element.id}
                 id={`element-${element.id}`}
-                onClick={() => handleElementClick(element.id)}
-                onMouseDown={(e) => {
-                  if (!e.defaultPrevented) {
-                    handleElementMouseDown(e, element.id);
-                  }
-                }}
-                className={`absolute ${
-                  resizingElement === element.id ? 'cursor-ew-resize' : 
-                  draggingElement === element.id ? 'cursor-grabbing' : 'cursor-grab'
-                } ${selectedElement === element.id ? 'ring-2 ring-blue-500' : ''}`}
+                onClick={isInteractive ? () => handleElementClick(element.id) : undefined}
+                onMouseDown={isInteractive ? (e) => { if (!e.defaultPrevented) { handleElementMouseDown(e, element.id); } } : undefined}
+                className={`absolute ${preview ? 'cursor-default' : (resizingElement === element.id ? 'cursor-ew-resize' : draggingElement === element.id ? 'cursor-grabbing' : 'cursor-grab')} ${!preview && selectedElement === element.id ? 'ring-2 ring-blue-500' : ''}`}
                 style={{
                   left: `${element.position.x}px`,
                   top: `${element.position.y}px`,
                   width: element.type === 'textbox' ? `${elementWidth}px` : 'auto',
                 }}
               >
-                <div className="bg-white p-4 rounded-lg border border-gray-300 shadow-sm hover:shadow-md transition-shadow relative" style={{ minWidth: element.type === 'textbox' ? 'auto' : '400px' }}>
+                <div className="bg-white p-4 rounded-lg border border-gray-300 shadow-sm transition-shadow relative" style={{ minWidth: element.type === 'textbox' ? 'auto' : '400px' }}>
                   {element.type === 'textbox' && (
                     <div className="flex items-start gap-3 relative">
-                      <textarea
-                        id={`textarea-${element.id}`}
-                        value={element.properties.label}
-                        onChange={(e) => {
-                          handleLabelChange(element.id, e.target.value);
-                          handleTextareaInput(element.id, e.currentTarget);
-                        }}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        className="flex-1 font-medium text-gray-700 bg-transparent border border-gray-300 focus:outline-none focus:border-blue-500 px-2 py-1 rounded resize-none overflow-hidden"
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder={element.properties.placeholder || 'Text Field'}
-                        rows={1}
-                        style={{ minHeight: '32px' }}
-                      />
-                      <div
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          handleResizeStart(e, element.id);
-                        }}
-                        className="absolute -right-2 top-4 w-4 h-8 cursor-ew-resize hover:bg-blue-100 rounded flex items-center justify-center group"
-                        title="Drag to resize"
-                      >
-                        <div className="w-1 h-6 bg-gray-400 group-hover:bg-blue-500 rounded"></div>
-                      </div>
+                      {preview ? (
+                        <div className="flex-1 font-medium text-gray-700 px-2 py-1" style={{ minHeight: '32px' }}>
+                          {element.properties.label || element.properties.placeholder || 'Text Field'}
+                        </div>
+                      ) : (
+                        <>
+                          <textarea
+                            id={`textarea-${element.id}`}
+                            value={element.properties.label ?? ''}
+                            onChange={(e) => {
+                              handleLabelChange(element.id, e.target.value);
+                              handleTextareaInput(element.id, e.currentTarget);
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            className="flex-1 font-medium text-gray-700 bg-transparent border border-gray-300 focus:outline-none focus:border-blue-500 px-2 py-1 rounded resize-none overflow-hidden"
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder={element.properties.placeholder || 'Text Field'}
+                            rows={1}
+                            style={{ minHeight: '32px' }}
+                          />
+                          <div
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              handleResizeStart(e, element.id);
+                            }}
+                            className="absolute -right-2 top-4 w-4 h-8 cursor-ew-resize hover:bg-blue-100 rounded flex items-center justify-center group"
+                            title="Drag to resize"
+                          >
+                            <div className="w-1 h-6 bg-gray-400 group-hover:bg-blue-500 rounded"></div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 
                   {element.type === 'checkbox' && (
                     <div className="flex items-center gap-3">
-                      <input
-                        type="text"
-                        value={element.properties.label}
-                        onChange={(e) => handleLabelChange(element.id, e.target.value)}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        className="flex-1 font-medium text-gray-700 bg-transparent border-b border-gray-300 focus:outline-none focus:border-blue-500 px-2 py-1"
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="Label"
-                      />
-                    <input
-                      type="checkbox"
-                      className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      readOnly
-                    />
-                  </div>
-                )}
+                      {preview ? (
+                        <>
+                          <input type="checkbox" className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
+                          <div className="flex-1 font-medium text-gray-700">{element.properties.label}</div>
+                        </>
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            value={element.properties.label ?? ''}
+                            onChange={(e) => handleLabelChange(element.id, e.target.value)}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            className="flex-1 font-medium text-gray-700 bg-transparent border-b border-gray-300 focus:outline-none focus:border-blue-500 px-2 py-1"
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="Label"
+                          />
+                          <input
+                            type="checkbox"
+                            className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            readOnly
+                          />
+                        </>
+                      )}
+                    </div>
+                  )}
 
                   {element.type === 'dropdown' && (
                     <div className="space-y-2">
-                      <input
-                        type="text"
-                        value={element.properties.label}
-                        onChange={(e) => handleLabelChange(element.id, e.target.value)}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        className="w-full font-medium text-gray-700 bg-transparent border-b border-gray-300 focus:outline-none focus:border-blue-500 px-2 py-1"
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="Label"
-                      />
-                    <div className="flex items-center gap-2">
-                      <select className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        {element.properties.options?.map((option, idx) => (
-                          <option key={idx}>{option}</option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditDropdown(element.id);
-                        }}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-md flex-shrink-0"
-                        title="Edit options"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </button>
+                      {preview ? (
+                        <>
+                          <div className="font-medium text-gray-700">{element.properties.label}</div>
+                          <div className="flex items-center gap-2">
+                            <select className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                              {element.properties.options?.map((option, idx) => (
+                                <option key={idx}>{option}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            value={element.properties.label ?? ''}
+                            onChange={(e) => handleLabelChange(element.id, e.target.value)}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            className="w-full font-medium text-gray-700 bg-transparent border-b border-gray-300 focus:outline-none focus:border-blue-500 px-2 py-1"
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="Label"
+                          />
+                          <div className="flex items-center gap-2">
+                            <select className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                              {element.properties.options?.map((option, idx) => (
+                                <option key={idx}>{option}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditDropdown(element.id);
+                              }}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-md flex-shrink-0"
+                              title="Edit options"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
-                  </div>
-                )}
+                  )}
 
-                  {selectedElement === element.id && (
+                  {!preview && selectedElement === element.id && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

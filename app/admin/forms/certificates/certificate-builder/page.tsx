@@ -12,6 +12,7 @@ export default function CertificateBuilderPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState('');
+  const [preview, setPreview] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -56,8 +57,11 @@ export default function CertificateBuilderPage() {
             <h1 className="text-2xl font-bold text-gray-900">Certificate Builder</h1>
           </div>
           <div className="flex items-center gap-3">
-            <button className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 font-medium">
-              Preview
+            <button
+              onClick={() => setPreview((p) => !p)}
+              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 font-medium"
+            >
+              {preview ? 'Exit Preview' : 'Preview'}
             </button>
             <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">
               Save Certificate
@@ -66,7 +70,7 @@ export default function CertificateBuilderPage() {
         </div>
       </div>
       
-      <CertificateBuilder userId={userId} />
+  <CertificateBuilder userId={userId} preview={preview} />
     </div>
   );
 }
