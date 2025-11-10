@@ -91,7 +91,8 @@ function getCorsOrigin(req: any): string | null {
   const allowed = [
     'http://localhost:3000',
     'https://stoveindustryapp-97cd8.web.app',
-    'https://stoveindustryapp-97cd8.firebaseapp.com'
+    'https://stoveindustryapp-97cd8.firebaseapp.com',
+    'https://sis-app-eight.vercel.app'
   ];
   return allowed.includes(origin) ? origin : null;
 }
