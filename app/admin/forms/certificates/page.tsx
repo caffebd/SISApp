@@ -1,12 +1,15 @@
-'use client';
+"use client";
 
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../../../../lib/firebase';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+
+import { collection, getDocs, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+
 import FormsNavigation from '../../../components/FormsNavigation';
+import DeleteConfirmModal from '../../../components/DeleteConfirmModal';
 
 interface Certificate {
   id: string;
@@ -48,10 +51,11 @@ export default function CertificatesPage() {
   const fetchCertificates = async (uid: string) => {
     setLoadingCertificates(true);
     try {
-      const certificatesRef = collection(db, 'USERS', uid, 'certificates');
+      // use the 'Certificates' subcollection (capital C) to match saving path
+      const certificatesRef = collection(db, 'USERS', uid, 'Certificates');
       const q = query(certificatesRef, orderBy('createdAt', 'desc'));
       const snapshot = await getDocs(q);
-      
+
       const certs: Certificate[] = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -60,12 +64,37 @@ export default function CertificatesPage() {
         createdAt: doc.data().createdAt?.toDate(),
         updatedAt: doc.data().updatedAt?.toDate(),
       } as Certificate));
-      
+
       setCertificates(certs);
     } catch (error) {
       console.error('Error fetching certificates:', error);
     } finally {
       setLoadingCertificates(false);
+    }
+  };
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Certificate | null>(null);
+
+  const confirmDelete = (cert: Certificate) => {
+    setDeleteTarget(cert);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirmed = async () => {
+    if (!deleteTarget) return;
+    try {
+      const docRef = doc(db, 'USERS', userId, 'Certificates', deleteTarget.id);
+      await deleteDoc(docRef);
+      // refresh list
+      await fetchCertificates(userId);
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error('Failed to delete certificate', err);
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+      alert('Failed to delete certificate');
     }
   };
 
@@ -76,10 +105,11 @@ export default function CertificatesPage() {
   // Filter certificates based on search term
   const filteredCertificates = certificates.filter((cert) => {
     if (!searchTerm.trim()) return true;
-    
+
     const search = searchTerm.toLowerCase();
+    const certName = (cert as any).name || cert.title || '';
     return (
-      cert.title?.toLowerCase().includes(search) ||
+      certName.toLowerCase().includes(search) ||
       cert.description?.toLowerCase().includes(search) ||
       cert.certificateNumber?.toLowerCase().includes(search) ||
       cert.status?.toLowerCase().includes(search)
@@ -185,64 +215,74 @@ export default function CertificatesPage() {
                     </p>
                   ) : (
                     <div className="space-y-3">
-                      {filteredCertificates.map((cert) => (
-                        <div
-                          key={cert.id}
-                          className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors"
-                        >
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-gray-900 mb-1">
-                                {cert.title || 'Untitled Certificate'}
-                              </h3>
-                              {cert.description && (
-                                <p className="text-sm text-gray-600 mb-2">{cert.description}</p>
-                              )}
-                              <div className="flex gap-4 text-sm flex-wrap">
-                                {cert.certificateNumber && (
-                                  <span className="text-gray-700">
-                                    <span className="font-medium">No:</span> {cert.certificateNumber}
-                                  </span>
+                        {filteredCertificates.map((cert) => (
+                          <div
+                            key={cert.id}
+                            className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <h3 className="font-semibold text-gray-900 mb-1">
+                                  {(cert as any).name || cert.title || 'Untitled Certificate'}
+                                </h3>
+                                {cert.description && (
+                                  <p className="text-sm text-gray-600 mb-2">{cert.description}</p>
                                 )}
-                                {cert.status && (
-                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                    cert.status.toLowerCase() === 'active' 
-                                      ? 'bg-green-100 text-green-700'
-                                      : cert.status.toLowerCase() === 'expired'
-                                      ? 'bg-red-100 text-red-700'
-                                      : 'bg-gray-100 text-gray-700'
-                                  }`}>
-                                    {cert.status}
-                                  </span>
-                                )}
-                                {cert.issueDate && (
-                                  <span className="text-gray-500">
-                                    <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
-                                    Issued: {cert.issueDate.toLocaleDateString()}
-                                  </span>
-                                )}
-                                {cert.expiryDate && (
-                                  <span className="text-gray-500">
-                                    Expires: {cert.expiryDate.toLocaleDateString()}
-                                  </span>
-                                )}
+                                <div className="flex gap-4 text-sm flex-wrap">
+                                  {cert.certificateNumber && (
+                                    <span className="text-gray-700">
+                                      <span className="font-medium">No:</span> {cert.certificateNumber}
+                                    </span>
+                                  )}
+                                  {cert.status && (
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                      cert.status.toLowerCase() === 'active' 
+                                        ? 'bg-green-100 text-green-700'
+                                        : cert.status.toLowerCase() === 'expired'
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {cert.status}
+                                    </span>
+                                  )}
+                                  {cert.issueDate && (
+                                    <span className="text-gray-500">
+                                      <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                      </svg>
+                                      Issued: {cert.issueDate.toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  {cert.expiryDate && (
+                                    <span className="text-gray-500">
+                                      Expires: {cert.expiryDate.toLocaleDateString()}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="ml-4 flex items-start gap-2">
+                                <button
+                                  onClick={() => router.push(`/admin/forms/certificates/certificate-builder?certificateId=${cert.id}`)}
+                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
+                                  title="Edit certificate"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => confirmDelete(cert)}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-md"
+                                  title="Delete certificate"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
                               </div>
                             </div>
-                            <button
-                              onClick={() => console.log('View/Edit certificate:', cert.id)}
-                              className="ml-4 p-2 text-blue-600 hover:bg-blue-50 rounded-md"
-                              title="View certificate"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
-                            </button>
                           </div>
-                        </div>
-                      ))}
+                        ))}
                     </div>
                   )}
                 </div>
@@ -250,6 +290,14 @@ export default function CertificatesPage() {
             </div>
           </div>
         </div>
+
+        <DeleteConfirmModal
+          isOpen={showDeleteModal}
+          onConfirm={handleDeleteConfirmed}
+          onCancel={() => setShowDeleteModal(false)}
+          title="Delete Certificate"
+          message={`Are you sure you want to delete "${(deleteTarget as any)?.name || deleteTarget?.title || 'this certificate'}"?`}
+        />
       </div>
     </div>
   );

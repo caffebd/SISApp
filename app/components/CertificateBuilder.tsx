@@ -1,15 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useImperativeHandle, forwardRef, useEffect } from 'react';
 import type { FormElement, ElementType } from './CertificateBuilderTypes';
 import DropdownOptionsModal from './DropdownOptionsModal';
 
 interface CertificateBuilderProps {
   userId: string;
   preview?: boolean;
+  initialElements?: FormElement[];
 }
 
-export default function CertificateBuilder({ userId, preview = false }: CertificateBuilderProps) {
+type CertificateBuilderHandle = {
+  getElements: () => FormElement[];
+};
+
+const CertificateBuilder = forwardRef<CertificateBuilderHandle, CertificateBuilderProps>(function CertificateBuilder({ userId, preview = false, initialElements = [] }: CertificateBuilderProps, ref) {
   const [elements, setElements] = useState<FormElement[]>([]);
   const [draggedType, setDraggedType] = useState<ElementType | null>(null);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
@@ -20,6 +25,26 @@ export default function CertificateBuilder({ userId, preview = false }: Certific
   const [elementHeights, setElementHeights] = useState<Record<string, number>>({});
   const [draggingElement, setDraggingElement] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  // Load initial elements when editing
+  useEffect(() => {
+    if (initialElements && initialElements.length > 0) {
+      setElements(initialElements);
+      // Restore element sizes if they exist in properties
+      const widths: Record<string, number> = {};
+      const heights: Record<string, number> = {};
+      initialElements.forEach(el => {
+        if ((el.properties as any)?.width) {
+          widths[el.id] = (el.properties as any).width;
+        }
+        if ((el.properties as any)?.height) {
+          heights[el.id] = (el.properties as any).height;
+        }
+      });
+      if (Object.keys(widths).length > 0) setElementWidths(widths);
+      if (Object.keys(heights).length > 0) setElementHeights(heights);
+    }
+  }, [initialElements]);
 
   const toolboxItems: { type: ElementType; label: string; icon: React.ReactNode }[] = [
     {
@@ -254,6 +279,11 @@ export default function CertificateBuilder({ userId, preview = false }: Certific
     return element?.properties.options || [];
   };
 
+  // expose imperative API to parent
+  useImperativeHandle(ref, () => ({
+    getElements: () => elements,
+  }));
+
   return (
     <div className="flex h-[calc(100vh-73px)]">
       {/* Left Toolbox */}
@@ -363,12 +393,13 @@ export default function CertificateBuilder({ userId, preview = false }: Certific
                     <div className="flex items-center gap-3">
                       {preview ? (
                         <>
-                          <input type="checkbox" className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
+                          <input key={`preview-checkbox-${element.id}`} type="checkbox" className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
                           <div className="flex-1 font-medium text-gray-700">{element.properties.label}</div>
                         </>
                       ) : (
                         <>
                           <input
+                            key={`edit-checkbox-label-${element.id}`}
                             type="text"
                             value={element.properties.label ?? ''}
                             onChange={(e) => handleLabelChange(element.id, e.target.value)}
@@ -378,6 +409,7 @@ export default function CertificateBuilder({ userId, preview = false }: Certific
                             placeholder="Label"
                           />
                           <input
+                            key={`edit-checkbox-${element.id}`}
                             type="checkbox"
                             className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                             readOnly
@@ -393,7 +425,7 @@ export default function CertificateBuilder({ userId, preview = false }: Certific
                         <>
                           <div className="font-medium text-gray-700">{element.properties.label}</div>
                           <div className="flex items-center gap-2">
-                            <select className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <select key={`preview-select-${element.id}`} className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                               {element.properties.options?.map((option, idx) => (
                                 <option key={idx}>{option}</option>
                               ))}
@@ -403,6 +435,7 @@ export default function CertificateBuilder({ userId, preview = false }: Certific
                       ) : (
                         <>
                           <input
+                            key={`edit-dropdown-label-${element.id}`}
                             type="text"
                             value={element.properties.label ?? ''}
                             onChange={(e) => handleLabelChange(element.id, e.target.value)}
@@ -412,7 +445,7 @@ export default function CertificateBuilder({ userId, preview = false }: Certific
                             placeholder="Label"
                           />
                           <div className="flex items-center gap-2">
-                            <select className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <select key={`edit-select-${element.id}`} className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                               {element.properties.options?.map((option, idx) => (
                                 <option key={idx}>{option}</option>
                               ))}
@@ -470,4 +503,6 @@ export default function CertificateBuilder({ userId, preview = false }: Certific
       )}
     </div>
   );
-}
+});
+
+export default CertificateBuilder;
