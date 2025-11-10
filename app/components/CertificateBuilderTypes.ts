@@ -1,4 +1,4 @@
-export type ElementType = 'textbox' | 'checkbox' | 'dropdown';
+export type ElementType = 'textbox' | 'inputbox' | 'checkbox' | 'dropdown';
 
 export interface FormElement {
   id: string;

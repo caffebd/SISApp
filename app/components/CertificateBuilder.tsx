@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useImperativeHandle, forwardRef, useEffect } from 'react';
+import React, { useState, useImperativeHandle, forwardRef, useEffect, useRef } from 'react';
 import type { FormElement, ElementType } from './CertificateBuilderTypes';
 import DropdownOptionsModal from './DropdownOptionsModal';
 
@@ -25,6 +25,7 @@ const CertificateBuilder = forwardRef<CertificateBuilderHandle, CertificateBuild
   const [elementHeights, setElementHeights] = useState<Record<string, number>>({});
   const [draggingElement, setDraggingElement] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const prevPreviewRef = useRef(preview);
 
   // Load initial elements when editing
   useEffect(() => {
@@ -46,6 +47,48 @@ const CertificateBuilder = forwardRef<CertificateBuilderHandle, CertificateBuild
     }
   }, [initialElements]);
 
+  // Handle preview mode transitions
+  useEffect(() => {
+    const prevPreview = prevPreviewRef.current;
+    
+    if (preview !== prevPreview) {
+      if (preview) {
+        // Entering preview mode - resize textareas and recalculate positions
+        setTimeout(() => {
+          elements.forEach((element) => {
+            if (element.type === 'textbox' || element.type === 'inputbox') {
+              const textarea = document.getElementById(`${element.type === 'textbox' ? 'textarea' : 'input-textarea'}-${element.id}`) as HTMLTextAreaElement;
+              if (textarea) {
+                textarea.style.height = 'auto';
+                textarea.style.height = textarea.scrollHeight + 'px';
+              }
+            }
+          });
+          // Recalculate positions after textareas are resized
+          setTimeout(() => recalculateAllPositions(), 50);
+        }, 0);
+      } else {
+        // Exiting preview mode - resize textareas back to their content and recalculate
+        setTimeout(() => {
+          elements.forEach((element) => {
+            if (element.type === 'textbox' || element.type === 'inputbox') {
+              const textarea = document.getElementById(`${element.type === 'textbox' ? 'textarea' : 'input-textarea'}-${element.id}`) as HTMLTextAreaElement;
+              if (textarea) {
+                // Resize textarea to fit content
+                textarea.style.height = 'auto';
+                textarea.style.height = textarea.scrollHeight + 'px';
+              }
+            }
+          });
+          // Recalculate positions after textareas are resized
+          setTimeout(() => recalculateAllPositions(), 50);
+        }, 0);
+      }
+      
+      prevPreviewRef.current = preview;
+    }
+  }, [preview, elements]);
+
   const toolboxItems: { type: ElementType; label: string; icon: React.ReactNode }[] = [
     {
       type: 'textbox',
@@ -53,6 +96,15 @@ const CertificateBuilder = forwardRef<CertificateBuilderHandle, CertificateBuild
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+        </svg>
+      ),
+    },
+    {
+      type: 'inputbox',
+      label: 'Input Box',
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
         </svg>
       ),
     },
@@ -104,9 +156,9 @@ const CertificateBuilder = forwardRef<CertificateBuilderHandle, CertificateBuild
         type: draggedType,
         position: { x: 20, y: calculateElementYPosition(elements.length) }, // Calculate position based on existing elements
         properties: {
-          label: draggedType === 'textbox' ? '' : draggedType === 'checkbox' ? 'Checkbox Label' : 'Dropdown Label',
+          label: draggedType === 'textbox' ? '' : draggedType === 'inputbox' ? 'Input Title' : draggedType === 'checkbox' ? 'Checkbox Label' : 'Dropdown Label',
           required: false,
-          placeholder: draggedType === 'textbox' ? 'Text Field' : undefined,
+          placeholder: draggedType === 'textbox' ? 'Text Field' : draggedType === 'inputbox' ? 'Enter text here...' : undefined,
           options: draggedType === 'dropdown' ? ['Option 1', 'Option 2'] : undefined,
         },
       };
@@ -152,6 +204,12 @@ const CertificateBuilder = forwardRef<CertificateBuilderHandle, CertificateBuild
     ));
   };
 
+  const handlePlaceholderChange = (id: string, newPlaceholder: string) => {
+    setElements(elements.map(el => 
+      el.id === id ? { ...el, properties: { ...el.properties, placeholder: newPlaceholder } } : el
+    ));
+  };
+
   const handleResizeStart = (e: React.MouseEvent, elementId: string) => {
     e.stopPropagation();
     setResizingElement(elementId);
@@ -184,7 +242,7 @@ const CertificateBuilder = forwardRef<CertificateBuilderHandle, CertificateBuild
     textarea.style.height = 'auto';
     textarea.style.height = textarea.scrollHeight + 'px';
     
-    // Update element height and reposition all elements
+    // Recalculate positions whenever textarea height changes (both edit and preview modes)
     const elementDiv = document.getElementById(`element-${id}`);
     if (elementDiv) {
       const newHeight = elementDiv.offsetHeight;
@@ -348,10 +406,10 @@ const CertificateBuilder = forwardRef<CertificateBuilderHandle, CertificateBuild
                 style={{
                   left: `${element.position.x}px`,
                   top: `${element.position.y}px`,
-                  width: element.type === 'textbox' ? `${elementWidth}px` : 'auto',
+                  width: (element.type === 'textbox' || element.type === 'inputbox') ? `${elementWidth}px` : 'auto',
                 }}
               >
-                <div className="bg-white p-4 rounded-lg border border-gray-300 shadow-sm transition-shadow relative" style={{ minWidth: element.type === 'textbox' ? 'auto' : '400px' }}>
+                <div className="bg-white p-4 rounded-lg border border-gray-300 shadow-sm transition-shadow relative" style={{ minWidth: (element.type === 'textbox' || element.type === 'inputbox') ? 'auto' : '400px' }}>
                   {element.type === 'textbox' && (
                     <div className="flex items-start gap-3 relative">
                       {preview ? (
@@ -379,10 +437,74 @@ const CertificateBuilder = forwardRef<CertificateBuilderHandle, CertificateBuild
                               e.stopPropagation();
                               handleResizeStart(e, element.id);
                             }}
-                            className="absolute -right-2 top-4 w-4 h-8 cursor-ew-resize hover:bg-blue-100 rounded flex items-center justify-center group"
-                            title="Drag to resize"
+                            className="absolute -right-2 top-0 w-8 h-8 cursor-ew-resize hover:bg-blue-100 rounded flex items-center justify-center group bg-white border border-gray-300 shadow-sm"
+                            title="Drag to resize width"
                           >
-                            <div className="w-1 h-6 bg-gray-400 group-hover:bg-blue-500 rounded"></div>
+                            <svg className="w-4 h-4 text-gray-500 group-hover:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" transform="rotate(90 12 12)" />
+                            </svg>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {element.type === 'inputbox' && (
+                    <div className="space-y-2 relative">
+                      {preview ? (
+                        <>
+                          <div className="font-medium text-gray-700 mb-2">{element.properties.label}</div>
+                          <textarea
+                            id={`input-textarea-${element.id}`}
+                            value={(element.properties as any).userInput ?? ''}
+                            onChange={(e) => {
+                              // Update user input in preview mode
+                              setElements((prev) =>
+                                prev.map((el) =>
+                                  el.id === element.id
+                                    ? { ...el, properties: { ...el.properties, userInput: e.target.value } as any }
+                                    : el
+                                )
+                              );
+                              handleTextareaInput(element.id, e.currentTarget);
+                            }}
+                            className="w-full text-gray-700 bg-white border border-gray-300 focus:outline-none focus:border-blue-500 px-3 py-2 rounded resize-none overflow-hidden"
+                            placeholder={element.properties.placeholder || 'Enter text here...'}
+                            rows={1}
+                            style={{ minHeight: '42px' }}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            value={element.properties.label ?? ''}
+                            onChange={(e) => handleLabelChange(element.id, e.target.value)}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            className="w-full font-medium text-gray-700 bg-transparent border-b border-gray-300 focus:outline-none focus:border-blue-500 px-2 py-1"
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="Input Title"
+                          />
+                          <input
+                            type="text"
+                            value={element.properties.placeholder ?? ''}
+                            onChange={(e) => handlePlaceholderChange(element.id, e.target.value)}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            className="w-full text-sm text-gray-500 bg-gray-50 border border-gray-300 focus:outline-none focus:border-blue-500 px-3 py-2 rounded"
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="Placeholder text..."
+                          />
+                          <div
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              handleResizeStart(e, element.id);
+                            }}
+                            className="absolute -right-2 top-0 w-8 h-8 cursor-ew-resize hover:bg-blue-100 rounded flex items-center justify-center group bg-white border border-gray-300 shadow-sm"
+                            title="Drag to resize width"
+                          >
+                            <svg className="w-4 h-4 text-gray-500 group-hover:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" transform="rotate(90 12 12)" />
+                            </svg>
                           </div>
                         </>
                       )}
