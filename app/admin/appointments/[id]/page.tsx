@@ -2,13 +2,14 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../../../lib/firebase';
 import Link from 'next/link';
 import StatusBadge from '../../../components/StatusBadge';
 import ContactMatchModal from '../../../components/ContactMatchModal';
+import DeleteConfirmModal from '../../../components/DeleteConfirmModal';
 
 const USER_ID = process.env.NEXT_PUBLIC_USER_ID || '1snBR67qkJQfZ68FoDAcM4GY8Qw2';
 
@@ -47,17 +48,26 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
   const [showContactMatch, setShowContactMatch] = useState(false);
   const [matchedContact, setMatchedContact] = useState<{ id: string; name: string } | null>(null);
   const [isCheckingMatch, setIsCheckingMatch] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form state
   const [editDate, setEditDate] = useState('');
-  const [editTime, setEditTime] = useState('');
-  const [editAmPm, setEditAmPm] = useState<'AM' | 'PM'>('AM');
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editStartAmPm, setEditStartAmPm] = useState<'AM' | 'PM'>('AM');
+  const [editEndTime, setEditEndTime] = useState('');
+  const [editEndAmPm, setEditEndAmPm] = useState<'AM' | 'PM'>('AM');
   const [editStatus, setEditStatus] = useState<AppointmentStatus>('pending');
   const [editType, setEditType] = useState('');
   const [engineers, setEngineers] = useState<Array<{ id: string; name: string }>>([]);
   const [engineersLoading, setEngineersLoading] = useState(false);
   const [editEngineerId, setEditEngineerId] = useState<string | undefined>(undefined);
-  const [busyEngineerIds, setBusyEngineerIds] = useState<Set<string>>(new Set());
+  const [existingAppointments, setExistingAppointments] = useState<Array<{
+    id: string;
+    engineerId?: string;
+    start: string;
+    end: string;
+  }>>([]);
 
   // Check authentication
   useEffect(() => {
@@ -116,18 +126,28 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
     setEditType(appt.appointmentType || '');
     setEditEngineerId(appt.engineerId);
 
-        // Parse date and time from ISO string
+        // Parse date and times from ISO string
         const startDate = new Date(appt.start);
+        const endDate = new Date(appt.end);
         setEditDate(appt.date);
         
-        // Convert to 12-hour format
-        let hours = startDate.getUTCHours();
-        const minutes = startDate.getUTCMinutes();
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12 || 12;
+        // Convert start time to 12-hour format
+        let startHours = startDate.getUTCHours();
+        const startMinutes = startDate.getUTCMinutes();
+        const startAmpm = startHours >= 12 ? 'PM' : 'AM';
+        startHours = startHours % 12 || 12;
         
-        setEditTime(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`);
-        setEditAmPm(ampm);
+        setEditStartTime(`${String(startHours).padStart(2, '0')}:${String(startMinutes).padStart(2, '0')}`);
+        setEditStartAmPm(startAmpm);
+        
+        // Convert end time to 12-hour format
+        let endHours = endDate.getUTCHours();
+        const endMinutes = endDate.getUTCMinutes();
+        const endAmpm = endHours >= 12 ? 'PM' : 'AM';
+        endHours = endHours % 12 || 12;
+        
+        setEditEndTime(`${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`);
+        setEditEndAmPm(endAmpm);
 
         // Fetch engineer name if assigned
         if (data.engineerId) {
@@ -261,19 +281,29 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
     setError('');
 
     try {
-      // Parse time and convert to 24-hour format
-      const [hours, minutes] = editTime.split(':').map(Number);
-      let hour24 = hours;
-      if (editAmPm === 'PM' && hours !== 12) {
-        hour24 = hours + 12;
-      } else if (editAmPm === 'AM' && hours === 12) {
-        hour24 = 0;
+      // Parse start time and convert to 24-hour format
+      const [startHours, startMinutes] = editStartTime.split(':').map(Number);
+      let startHour24 = startHours;
+      if (editStartAmPm === 'PM' && startHours !== 12) {
+        startHour24 = startHours + 12;
+      } else if (editStartAmPm === 'AM' && startHours === 12) {
+        startHour24 = 0;
+      }
+
+      // Parse end time and convert to 24-hour format
+      const [endHours, endMinutes] = editEndTime.split(':').map(Number);
+      let endHour24 = endHours;
+      if (editEndAmPm === 'PM' && endHours !== 12) {
+        endHour24 = endHours + 12;
+      } else if (editEndAmPm === 'AM' && endHours === 12) {
+        endHour24 = 0;
       }
 
       // Create ISO datetime strings
-      const startISO = `${editDate}T${String(hour24).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00Z`;
+      const startISO = `${editDate}T${String(startHour24).padStart(2, '0')}:${String(startMinutes).padStart(2, '0')}:00Z`;
+      const endISO = `${editDate}T${String(endHour24).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00Z`;
       const startDate = new Date(startISO);
-      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1 hour later
+      const endDate = new Date(endISO);
 
       // Update Firestore
       const appointmentRef = doc(db, 'USERS', USER_ID, 'appointments', id);
@@ -315,83 +345,114 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
     }
   };
 
-  // Fetch engineers list
+  // Fetch engineers list and existing appointments
   useEffect(() => {
     if (!isAuthenticated) return;
-    const fetchEngineers = async () => {
+    
+    const fetchData = async () => {
       setEngineersLoading(true);
       try {
+        // Fetch engineers
         const engineersRef = collection(db, 'USERS', USER_ID, 'engineers');
-        const snap = await getDocs(engineersRef);
-        const list: Array<{ id: string; name: string }> = [];
-        snap.forEach(docSnap => {
+        const engineersSnap = await getDocs(engineersRef);
+        const engineersList: Array<{ id: string; name: string }> = [];
+        engineersSnap.forEach(docSnap => {
           const data = docSnap.data();
-            list.push({ id: docSnap.id, name: data.name || docSnap.id });
+          engineersList.push({ id: docSnap.id, name: data.name || docSnap.id });
         });
-        setEngineers(list);
+        setEngineers(engineersList);
+        
         // If engineerId loaded earlier, ensure engineerName sync
         if (editEngineerId) {
-          const eng = list.find(e => e.id === editEngineerId);
+          const eng = engineersList.find(e => e.id === editEngineerId);
           if (eng) setEngineerName(eng.name);
         }
+
+        // Fetch existing appointments
+        const appointmentsRef = collection(db, 'USERS', USER_ID, 'appointments');
+        const appointmentsSnap = await getDocs(appointmentsRef);
+        const appointmentsList: Array<{
+          id: string;
+          engineerId?: string;
+          start: string;
+          end: string;
+        }> = [];
+        appointmentsSnap.forEach(docSnap => {
+          const data = docSnap.data();
+          appointmentsList.push({
+            id: docSnap.id,
+            engineerId: data.engineerId,
+            start: data.start,
+            end: data.end,
+          });
+        });
+        setExistingAppointments(appointmentsList);
       } catch (err) {
-        console.error('Error fetching engineers:', err);
+        console.error('Error fetching data:', err);
       } finally {
         setEngineersLoading(false);
       }
     };
-    fetchEngineers();
+    
+    fetchData();
   }, [isAuthenticated, editEngineerId]);
 
-  // Recompute busy engineers whenever date/time changes
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (!editDate || !editTime) return;
-    const computeBusy = async () => {
-      try {
-        // Convert selected time to start/end Date objects
-        const [hours, minutes] = editTime.split(':').map(Number);
-        let hour24 = hours;
-        if (editAmPm === 'PM' && hours !== 12) hour24 = hours + 12;
-        if (editAmPm === 'AM' && hours === 12) hour24 = 0;
-        const startISO = `${editDate}T${String(hour24).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:00Z`;
-        const startCandidate = new Date(startISO);
-        const endCandidate = new Date(startCandidate.getTime() + 60*60*1000); // 1 hour slot
+  // Check if an engineer is busy during the selected time
+  const isEngineerBusy = (engineerId: string): boolean => {
+    if (!engineerId || !editDate || !editStartTime || !editEndTime) return false;
+    
+    // Convert selected start time to timestamp
+    const [startHours, startMinutes] = editStartTime.split(':').map(Number);
+    let startHour24 = startHours;
+    if (editStartAmPm === 'PM' && startHours !== 12) startHour24 = startHours + 12;
+    if (editStartAmPm === 'AM' && startHours === 12) startHour24 = 0;
+    const slotStart = new Date(`${editDate}T${String(startHour24).padStart(2, '0')}:${String(startMinutes).padStart(2, '0')}:00`).getTime();
+    
+    // Convert selected end time to timestamp
+    const [endHours, endMinutes] = editEndTime.split(':').map(Number);
+    let endHour24 = endHours;
+    if (editEndAmPm === 'PM' && endHours !== 12) endHour24 = endHours + 12;
+    if (editEndAmPm === 'AM' && endHours === 12) endHour24 = 0;
+    const slotEnd = new Date(`${editDate}T${String(endHour24).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00`).getTime();
+    
+    // Check if engineer has any appointment overlapping with this time
+    return existingAppointments.some(apt => {
+      // Skip the current appointment being edited
+      if (apt.id === appointment?.id) return false;
+      
+      // Only check appointments for this engineer
+      if (apt.engineerId !== engineerId) return false;
+      
+      const aptStart = new Date(apt.start).getTime();
+      const aptEnd = new Date(apt.end).getTime();
+      
+      // Check for overlap
+      return aptStart < slotEnd && aptEnd > slotStart;
+    });
+  };
 
-        const apptsRef = collection(db, 'USERS', USER_ID, 'appointments');
-        // Query all appointments for same date (not just confirmed/offered)
-        const qAppts = query(apptsRef, where('date','==', editDate));
-        const snap = await getDocs(qAppts);
-        const busy = new Set<string>();
-        snap.forEach(docSnap => {
-          // Skip the current appointment being edited
-          if (docSnap.id === appointment?.id) return;
-          
-          const data = docSnap.data();
-          const status = data.status;
-          
-          // Only consider confirmed or offered appointments as blocking
-          if (status !== 'confirmed' && status !== 'offered') return;
-          
-          const engineerId = data.engineerId;
-          if (!engineerId) return;
-          
-          const otherStart = new Date(data.start);
-          const otherEnd = new Date(data.end);
-          
-          // Check for time overlap
-          const overlap = startCandidate < otherEnd && endCandidate > otherStart;
-          if (overlap) {
-            busy.add(engineerId);
-          }
-        });
-        setBusyEngineerIds(busy);
-      } catch (err) {
-        console.error('Error computing busy engineers:', err);
-      }
-    };
-    computeBusy();
-  }, [isAuthenticated, editDate, editTime, editAmPm, appointment?.id]);
+  // Get list of available and busy engineers
+  const availableEngineers = engineers.filter(eng => !isEngineerBusy(eng.id) || eng.id === editEngineerId);
+  const busyEngineers = engineers.filter(eng => isEngineerBusy(eng.id) && eng.id !== editEngineerId);
+
+  const handleDeleteAppointment = async () => {
+    if (!appointment) return;
+    
+    setIsDeleting(true);
+    try {
+      const appointmentRef = doc(db, 'USERS', USER_ID, 'appointments', id);
+      await deleteDoc(appointmentRef);
+      
+      // Navigate back to appointments page
+      router.push('/admin/appointments');
+    } catch (err) {
+      console.error('Error deleting appointment:', err);
+      setError('Failed to delete appointment. Please try again.');
+      setShowDeleteModal(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleEmailClick = () => {
     if (!appointment?.customer.email || !appointment?.customer.name) return;
@@ -412,7 +473,7 @@ Thank you for your enquiry. Unfortunately, we couldn't book the exact date and t
 
 Would the following work for you?
 
-${dayName} ${dateFormatted} at ${editTime} ${editAmPm}
+${dayName} ${dateFormatted} at ${editStartTime} ${editStartAmPm} - ${editEndTime} ${editEndAmPm}
 
 If so please confirm by replying to this email or calling 0123456678
 
@@ -486,7 +547,18 @@ SIS Team`;
 
           <div className="flex items-center justify-between">
             <h1 className="text-4xl font-bold text-gray-900">Appointment Details</h1>
-            <StatusBadge status={appointment.status} />
+            <div className="flex items-center gap-3">
+              <StatusBadge status={appointment.status} />
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="p-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors shadow-md hover:shadow-lg"
+                title="Delete appointment"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -644,22 +716,46 @@ SIS Team`;
                 </p>
               </div>
 
-              {/* Time Picker */}
+              {/* Start Time Picker */}
               <div>
-                <label htmlFor="edit-time" className="block text-sm font-semibold text-gray-700 mb-2">
-                  Appointment Time
+                <label htmlFor="edit-start-time" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Start Time
                 </label>
                 <div className="flex gap-3">
                   <input
                     type="time"
-                    id="edit-time"
-                    value={editTime}
-                    onChange={(e) => setEditTime(e.target.value)}
+                    id="edit-start-time"
+                    value={editStartTime}
+                    onChange={(e) => setEditStartTime(e.target.value)}
                     className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-gray-900 font-medium"
                   />
                   <select
-                    value={editAmPm}
-                    onChange={(e) => setEditAmPm(e.target.value as 'AM' | 'PM')}
+                    value={editStartAmPm}
+                    onChange={(e) => setEditStartAmPm(e.target.value as 'AM' | 'PM')}
+                    className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-gray-900 font-semibold bg-white"
+                  >
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* End Time Picker */}
+              <div>
+                <label htmlFor="edit-end-time" className="block text-sm font-semibold text-gray-700 mb-2">
+                  End Time
+                </label>
+                <div className="flex gap-3">
+                  <input
+                    type="time"
+                    id="edit-end-time"
+                    value={editEndTime}
+                    onChange={(e) => setEditEndTime(e.target.value)}
+                    className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-gray-900 font-medium"
+                  />
+                  <select
+                    value={editEndAmPm}
+                    onChange={(e) => setEditEndAmPm(e.target.value as 'AM' | 'PM')}
                     className="px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-gray-900 font-semibold bg-white"
                   >
                     <option value="AM">AM</option>
@@ -681,21 +777,50 @@ SIS Team`;
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-gray-900 font-medium bg-white"
                 >
                   <option value="">Unassigned</option>
-                  {engineers.map(eng => {
-                    const isBusy = busyEngineerIds.has(eng.id);
-                    const disabled = isBusy && eng.id !== editEngineerId; // allow keeping current engineer even if overlapping
-                    return (
-                      <option
-                        key={eng.id}
-                        value={eng.id}
-                        disabled={disabled}
-                      >
-                        {eng.name}{isBusy ? ' (Busy)' : ''}
-                      </option>
-                    );
-                  })}
+                  
+                  {/* Available Engineers */}
+                  {availableEngineers.length > 0 && (
+                    <optgroup label="Available">
+                      {availableEngineers.map(eng => {
+                        const isBusy = isEngineerBusy(eng.id);
+                        return (
+                          <option key={eng.id} value={eng.id}>
+                            {eng.name}{eng.id === editEngineerId && isBusy ? ' (Currently Assigned)' : ''}
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  )}
+                  
+                  {/* Busy Engineers - Disabled */}
+                  {busyEngineers.length > 0 && (
+                    <optgroup label="Busy (Not Available)">
+                      {busyEngineers.map(eng => (
+                        <option key={eng.id} value={eng.id} disabled>
+                          {eng.name} (Busy)
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
-                <p className="mt-2 text-xs text-gray-600">Busy engineers are disabled. Adjust time/date to free up slots.</p>
+                
+                {busyEngineers.length > 0 && (
+                  <p className="mt-2 text-sm text-amber-600">
+                    ⚠️ {busyEngineers.length} engineer{busyEngineers.length !== 1 ? 's are' : ' is'} busy during this time slot
+                  </p>
+                )}
+                
+                {editEngineerId && isEngineerBusy(editEngineerId) && (
+                  <p className="mt-2 text-sm text-blue-600">
+                    ℹ️ Currently assigned engineer has overlapping appointments. Consider reassigning or adjusting time.
+                  </p>
+                )}
+                
+                {availableEngineers.length === 0 && engineers.length > 0 && (
+                  <p className="mt-2 text-sm text-red-600 font-medium">
+                    ⚠️ All engineers are busy during this time slot. Adjust time/date to free up slots.
+                  </p>
+                )}
               </div>
 
               {/* Appointment Type Field */}
@@ -792,6 +917,15 @@ SIS Team`;
           }}
           currentMatchedContactId={matchedContact?.id}
           onMatchSuccess={handleContactMatchSuccess}
+        />
+
+        {/* Delete Confirmation Modal */}
+        <DeleteConfirmModal
+          isOpen={showDeleteModal}
+          onConfirm={handleDeleteAppointment}
+          onCancel={() => setShowDeleteModal(false)}
+          title="WARNING"
+          message="Are you sure you want to delete this appointment?"
         />
       </div>
     </div>

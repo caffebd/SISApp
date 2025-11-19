@@ -28,6 +28,9 @@ interface MonthCalendarProps {
   onPrevious: () => void;
   onNext: () => void;
   onToday: () => void;
+  selectionMode?: boolean;
+  selectedTimeSlots?: Array<{ date: string; startTime: string; endTime: string }>;
+  onToggleTimeSlot?: (date: string, startTime: string, endTime: string) => void;
 }
 
 export default function MonthCalendar({
@@ -37,6 +40,9 @@ export default function MonthCalendar({
   onPrevious,
   onNext,
   onToday,
+  selectionMode = false,
+  selectedTimeSlots = [],
+  onToggleTimeSlot,
 }: MonthCalendarProps) {
   // Get calendar grid (6 weeks)
   const calendarDays = useMemo(() => {
@@ -146,16 +152,23 @@ export default function MonthCalendar({
             const currentMonth = isCurrentMonth(date);
             const visibleAppointments = dayAppointments.slice(0, 2);
             const remainingCount = dayAppointments.length - visibleAppointments.length;
-
             return (
               <div
                 key={index}
-                className={`min-h-[120px] border rounded-lg p-2 ${
-                  today ? 'bg-blue-50 border-blue-300' : 'border-gray-200'
-                } ${!currentMonth ? 'bg-gray-50' : 'bg-white'}`}
+                className={`relative min-h-[120px] border rounded-lg p-2 ${
+                  today
+                    ? 'bg-blue-50 border-blue-300'
+                    : 'border-gray-200'
+                } ${!currentMonth ? 'bg-gray-50' : 'bg-white'} ${
+                  selectionMode ? 'opacity-60' : ''
+                }`}
               >
                 <div className={`text-sm font-semibold mb-2 ${
-                  today ? 'text-blue-700' : currentMonth ? 'text-gray-900' : 'text-gray-400'
+                  today
+                    ? 'text-blue-700'
+                    : currentMonth
+                    ? 'text-gray-900'
+                    : 'text-gray-400'
                 }`}>
                   {date.getDate()}
                 </div>

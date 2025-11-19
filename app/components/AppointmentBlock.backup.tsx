@@ -26,7 +26,6 @@ interface AppointmentBlockProps {
   engineerName?: string;
   compact?: boolean;
   showTime?: boolean;
-  columnWidth?: number; // Width percentage (0-100)
 }
 
 const statusColors: Record<AppointmentStatus, string> = {
@@ -42,8 +41,7 @@ export default function AppointmentBlock({
   appointment, 
   engineerName, 
   compact = false,
-  showTime = true,
-  columnWidth = 100
+  showTime = true 
 }: AppointmentBlockProps) {
   const formatTime = (isoDateTime: string): string => {
     const date = new Date(isoDateTime);
@@ -76,31 +74,18 @@ export default function AppointmentBlock({
     );
   }
 
-  // Determine if we need compact display based on column width
-  const isNarrow = columnWidth < 50;
-  const isVeryNarrow = columnWidth < 33;
-
   return (
     <Link href={`/admin/appointments/${appointment.id}`}>
-      <div 
-        className={`${colorClass} text-white rounded-lg cursor-pointer transition-colors border-l-4 shadow-sm h-full flex flex-col justify-center overflow-hidden ${
-          isVeryNarrow ? 'p-1' : 'p-2'
-        }`}
-        title={`${formatTime(appointment.start)} - ${formatTime(appointment.end)} | ${getJobDescription()} | ${appointment.address.postcode}${appointment.customer.name ? ' | ' + appointment.customer.name : ''}`}
-      >
-        <div className={`font-bold mb-0.5 truncate ${isVeryNarrow ? 'text-xs' : isNarrow ? 'text-xs' : 'text-sm'}`}>
+      <div className={`${colorClass} text-white rounded-lg p-2 cursor-pointer transition-colors border-l-4 shadow-sm h-full flex flex-col justify-center overflow-hidden`}>
+        <div className="font-bold text-sm mb-0.5">
           {formatTime(appointment.start)} - {formatTime(appointment.end)}
         </div>
-        <div className={`font-medium truncate ${isVeryNarrow ? 'text-[10px]' : isNarrow ? 'text-xs' : 'text-sm'}`}>
-          {getJobDescription()}
+        <div className="text-sm font-medium truncate">{getJobDescription()}</div>
+        <div className="text-xs opacity-90 truncate">
+          {appointment.address.postcode}
         </div>
-        {!isVeryNarrow && (
-          <div className={`opacity-90 truncate ${isNarrow ? 'text-[10px]' : 'text-xs'}`}>
-            {appointment.address.postcode}
-          </div>
-        )}
-        {!isVeryNarrow && appointment.customer.name && (
-          <div className={`opacity-90 truncate ${isNarrow ? 'text-[10px]' : 'text-xs'}`}>
+        {appointment.customer.name && (
+          <div className="text-xs opacity-90 truncate">
             {appointment.customer.name}
           </div>
         )}

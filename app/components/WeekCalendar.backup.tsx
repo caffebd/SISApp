@@ -1,6 +1,5 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo } from 'react';
 import AppointmentBlock from './AppointmentBlock';
-import { assignColumnsByDate } from '../../lib/calendarUtils';
 
 type AppointmentStatus = 'pending' | 'offered' | 'confirmed' | 'declined' | 'cancelled' | 'complete';
 
@@ -32,7 +31,6 @@ interface WeekCalendarProps {
   selectionMode?: boolean;
   selectedTimeSlots?: Array<{ date: string; startTime: string; endTime: string }>;
   onToggleTimeSlot?: (date: string, startTime: string, endTime: string) => void;
-  totalEngineers?: number;
 }
 
 export default function WeekCalendar({
@@ -45,11 +43,7 @@ export default function WeekCalendar({
   selectionMode = false,
   selectedTimeSlots = [],
   onToggleTimeSlot,
-  totalEngineers = 0,
 }: WeekCalendarProps) {
-  // Drag selection state
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStartSlot, setDragStartSlot] = useState<{ date: string; time: string } | null>(null);
   // Get the week days - currentDate is the first day shown (leftmost)
   const weekDays = useMemo(() => {
     const days = [];
@@ -77,11 +71,6 @@ export default function WeekCalendar({
     return grouped;
   }, [appointments]);
 
-  // Assign columns to appointments for proper overlap handling
-  const columnAssignments = useMemo(() => {
-    return assignColumnsByDate(appointments);
-  }, [appointments]);
-
   // Calculate which appointments should be rendered in each time slot
   const getAppointmentsForSlot = (dateKey: string, slotHour: number) => {
     const dayAppointments = appointmentsByDate[dateKey] || [];
@@ -93,37 +82,6 @@ export default function WeekCalendar({
       // Only render appointment in its starting hour slot
       return startHour === slotHour;
     });
-  };
-
-  // Check if a time slot is fully booked (all engineers are busy)
-  const isSlotFullyBooked = (dateKey: string, slotStartTime: string, slotEndTime: string) => {
-    // If no engineers configured, slot is always available
-    if (totalEngineers === 0) return false;
-    
-    const dayAppointments = appointmentsByDate[dateKey] || [];
-    
-    // Parse slot times
-    const slotStart = new Date(`${dateKey}T${slotStartTime}:00`).getTime();
-    const slotEnd = new Date(`${dateKey}T${slotEndTime}:00`).getTime();
-    
-    // Count unique engineers who are busy during this slot
-    const busyEngineers = new Set<string>();
-    
-    dayAppointments.forEach(apt => {
-      const aptStart = new Date(apt.start).getTime();
-      const aptEnd = new Date(apt.end).getTime();
-      
-      // Check for overlap: appointment starts before slot ends AND appointment ends after slot starts
-      if (aptStart < slotEnd && aptEnd > slotStart) {
-        // This appointment overlaps with the slot
-        if (apt.engineerId) {
-          busyEngineers.add(apt.engineerId);
-        }
-      }
-    });
-    
-    // Slot is fully booked only if all engineers are busy
-    return busyEngineers.size >= totalEngineers;
   };
 
   // Calculate the height of an appointment in pixels
@@ -164,60 +122,6 @@ export default function WeekCalendar({
     const today = new Date();
     return date.toDateString() === today.toDateString();
   };
-
-  // Handle drag selection
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, dateKey: string, startTimeStr: string, endTimeStr: string, slotIsFullyBooked: boolean) => {
-    if (!selectionMode || !onToggleTimeSlot || slotIsFullyBooked) return;
-    
-    // Prevent all default behaviors
-    e.preventDefault();
-    e.stopPropagation();
-    
-    setIsDragging(true);
-    setDragStartSlot({ date: dateKey, time: startTimeStr });
-    
-    // Toggle the starting slot
-    onToggleTimeSlot(dateKey, startTimeStr, endTimeStr);
-  };
-
-  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Prevent default click behavior
-    e.preventDefault();
-    e.stopPropagation();
-  };
-  
-  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Prevent context menu which can cause scroll
-    e.preventDefault();
-  };
-
-  const handleMouseEnter = (dateKey: string, startTimeStr: string, endTimeStr: string, slotIsFullyBooked: boolean) => {
-    if (!isDragging || !selectionMode || !onToggleTimeSlot || slotIsFullyBooked) return;
-    if (!dragStartSlot) return;
-    
-    // Check if slot is already selected
-    const isAlreadySelected = selectedTimeSlots.some(
-      slot => slot.date === dateKey && slot.startTime === startTimeStr
-    );
-    
-    // Only select if not already selected (prevent deselecting during drag)
-    if (!isAlreadySelected) {
-      onToggleTimeSlot(dateKey, startTimeStr, endTimeStr);
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-    setDragStartSlot(null);
-  };
-
-  // Add global mouse up listener to handle drag end outside calendar
-  useEffect(() => {
-    if (isDragging) {
-      window.addEventListener('mouseup', handleMouseUp);
-      return () => window.removeEventListener('mouseup', handleMouseUp);
-    }
-  }, [isDragging]);
 
   return (
     <div className="bg-white rounded-xl shadow-md">
@@ -306,41 +210,23 @@ export default function WeekCalendar({
                   const isSlotSelected = selectedTimeSlots.some(
                     slot => slot.date === dateKey && slot.startTime === startTimeStr
                   );
-                  
-                  // Check if this slot is fully booked (all engineers busy)
-                  const slotIsFullyBooked = isSlotFullyBooked(dateKey, startTimeStr, endTimeStr);
 
                   return (
                     <div
                       key={dayIndex}
-                      onMouseDown={(e) => handleMouseDown(e, dateKey, startTimeStr, endTimeStr, slotIsFullyBooked)}
-                      onMouseEnter={() => handleMouseEnter(dateKey, startTimeStr, endTimeStr, slotIsFullyBooked)}
-                      onMouseUp={handleMouseUp}
-                      onClick={handleClick}
-                      onContextMenu={handleContextMenu}
-                      onDragStart={(e) => e.preventDefault()}
-                      onFocus={(e) => e.preventDefault()}
-                      tabIndex={-1}
-                      style={isSlotSelected ? { boxShadow: 'inset 0 0 0 2px rgb(20 184 166)' } : undefined}
-                      className={`relative p-2 border-l border-gray-200 min-h-[80px] select-none ${
-                        isDragging ? 'cursor-grabbing' : selectionMode && !slotIsFullyBooked ? 'cursor-pointer' : ''
-                      } ${
+                      onClick={() => {
+                        if (selectionMode && onToggleTimeSlot) {
+                          onToggleTimeSlot(dateKey, startTimeStr, endTimeStr);
+                        }
+                      }}
+                      className={`relative p-2 border-l border-gray-200 min-h-[80px] ${
                         isToday(date) ? 'bg-gray-50' : ''
                       } ${
-                        selectionMode && !slotIsFullyBooked && !isDragging ? 'hover:bg-teal-50' : ''
+                        selectionMode ? 'cursor-pointer hover:bg-teal-50' : ''
                       } ${
-                        selectionMode && slotIsFullyBooked ? 'cursor-not-allowed bg-gray-100' : ''
-                      } ${
-                        isSlotSelected ? 'bg-teal-100' : ''
+                        isSlotSelected ? 'bg-teal-100 border-2 border-teal-500' : ''
                       }`}
                     >
-                      {selectionMode && slotIsFullyBooked && (
-                        <div className="absolute top-1 right-1 z-30">
-                          <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      )}
                       {isSlotSelected && (
                         <div className="absolute top-1 right-1 z-30">
                           <svg className="w-4 h-4 text-teal-600" fill="currentColor" viewBox="0 0 20 20">
@@ -348,7 +234,7 @@ export default function WeekCalendar({
                           </svg>
                         </div>
                       )}
-                      {slotAppointments.map((apt) => {
+                      {slotAppointments.map((apt, aptIndex) => {
                         const height = calculateAppointmentHeight(apt);
                         const startTime = new Date(apt.start);
                         const startMinutes = startTime.getMinutes();
@@ -356,15 +242,10 @@ export default function WeekCalendar({
                         // Calculate top offset based on minutes past the hour
                         const topOffset = (startMinutes / 60) * 80; // 80px per hour
                         
-                        // Get column assignment for this appointment
-                        const dateColumns = columnAssignments.get(dateKey);
-                        const columnInfo = dateColumns?.get(apt.id);
-                        const column = columnInfo?.column ?? 0;
-                        const columnCount = columnInfo?.columnCount ?? 1;
-                        
-                        // Calculate horizontal position based on column assignment
-                        const widthPercent = 100 / columnCount;
-                        const leftPercent = column * widthPercent;
+                        // Calculate horizontal position for overlapping appointments
+                        const totalInSlot = slotAppointments.length;
+                        const widthPercent = totalInSlot > 1 ? 100 / totalInSlot : 100;
+                        const leftPercent = totalInSlot > 1 ? (aptIndex * widthPercent) : 0;
                         
                         return (
                           <div
@@ -375,15 +256,14 @@ export default function WeekCalendar({
                               height: `${height}px`,
                               left: `${leftPercent}%`,
                               width: `${widthPercent}%`,
-                              zIndex: 10 + column,
-                              paddingLeft: column > 0 ? '2px' : '8px',
-                              paddingRight: column < columnCount - 1 ? '2px' : '8px',
+                              zIndex: 10,
+                              paddingLeft: aptIndex > 0 ? '2px' : '8px',
+                              paddingRight: aptIndex < totalInSlot - 1 ? '2px' : '8px',
                             }}
                           >
                             <AppointmentBlock
                               appointment={apt}
                               engineerName={apt.engineerId ? engineerNames[apt.engineerId] : undefined}
-                              columnWidth={widthPercent}
                             />
                           </div>
                         );

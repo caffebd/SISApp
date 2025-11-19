@@ -44,6 +44,11 @@ export default function AppointmentsPage() {
   const [error, setError] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('week');
+  
+  // Time slot selection state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState<Array<{ date: string; startTime: string; endTime: string }>>([]);
+  
   const [currentDate, setCurrentDate] = useState(() => {
     // Initialize to Monday of current week for week view
     const today = new Date();
@@ -177,6 +182,9 @@ export default function AppointmentsPage() {
 
   const handleViewChange = (newView: ViewMode) => {
     setViewMode(newView);
+    // Exit selection mode when changing views
+    setSelectionMode(false);
+    setSelectedTimeSlots([]);
     // Reset to today when changing views
     if (newView === 'week') {
       // For week view, set to Monday of current week
@@ -190,6 +198,74 @@ export default function AppointmentsPage() {
     } else {
       setCurrentDate(new Date());
     }
+  };
+
+  const toggleSelectionMode = () => {
+    setSelectionMode(!selectionMode);
+    setSelectedTimeSlots([]);
+  };
+
+  const handleToggleTimeSlot = (date: string, startTime: string, endTime: string) => {
+    const slotKey = `${date}-${startTime}`;
+    
+    setSelectedTimeSlots(prev => {
+      const exists = prev.find(slot => `${slot.date}-${slot.startTime}` === slotKey);
+      
+      if (exists) {
+        return prev.filter(slot => `${slot.date}-${slot.startTime}` !== slotKey);
+      } else {
+        return [...prev, { date, startTime, endTime }].sort((a, b) => {
+          const dateCompare = a.date.localeCompare(b.date);
+          if (dateCompare !== 0) return dateCompare;
+          return a.startTime.localeCompare(b.startTime);
+        });
+      }
+    });
+  };
+
+  const handleBookTimeSlots = () => {
+    if (selectedTimeSlots.length === 0) return;
+    
+    // Navigate to appointment creation page with selected time slots
+    const slotsParam = selectedTimeSlots.map(slot => `${slot.date}|${slot.startTime}|${slot.endTime}`).join(',');
+    router.push(`/admin/appointments/create?slots=${encodeURIComponent(slotsParam)}`);
+  };
+
+  // Calculate the actual number of appointments that will be created (after merging)
+  const calculateMergedAppointmentCount = () => {
+    if (selectedTimeSlots.length === 0) return 0;
+    
+    // Sort slots by date and time
+    const sortedSlots = [...selectedTimeSlots].sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      return a.startTime.localeCompare(b.startTime);
+    });
+    
+    let count = 0;
+    let i = 0;
+    
+    while (i < sortedSlots.length) {
+      count++; // Start a new appointment
+      const currentSlot = sortedSlots[i];
+      let endTime = currentSlot.endTime;
+      
+      // Check for consecutive slots
+      while (i + 1 < sortedSlots.length) {
+        const nextSlot = sortedSlots[i + 1];
+        
+        if (nextSlot.date === currentSlot.date && nextSlot.startTime === endTime) {
+          endTime = nextSlot.endTime;
+          i++;
+        } else {
+          break;
+        }
+      }
+      
+      i++;
+    }
+    
+    return count;
   };
 
   if (!isAuthenticated) {
@@ -229,11 +305,58 @@ export default function AppointmentsPage() {
                 {appointments.length} {appointments.length === 1 ? 'appointment' : 'appointments'} total
               </p>
             </div>
-            <CalendarViewSelector 
-              currentView={viewMode}
-              onViewChange={handleViewChange}
-            />
+            <div className="flex items-center gap-4">
+              <CalendarViewSelector 
+                currentView={viewMode}
+                onViewChange={handleViewChange}
+              />
+              <button
+                onClick={toggleSelectionMode}
+                className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                  selectionMode
+                    ? 'bg-teal-600 text-white hover:bg-teal-700'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                {selectionMode ? 'Cancel Selection' : 'Select Time Slots'}
+              </button>
+            </div>
           </div>
+        </div>
+
+        {/* Reserved space for selection banner - always present to prevent layout shift */}
+        <div className="mb-6" style={{ minHeight: selectionMode ? '88px' : '0px', transition: 'min-height 0.2s ease-in-out' }}>
+          {selectionMode && selectedTimeSlots.length > 0 && (() => {
+            const appointmentCount = calculateMergedAppointmentCount();
+            return (
+              <div className="bg-teal-50 border-2 border-teal-200 rounded-xl p-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      {selectedTimeSlots.length} time {selectedTimeSlots.length === 1 ? 'slot' : 'slots'} selected
+                      {appointmentCount < selectedTimeSlots.length && (
+                        <span className="text-teal-600 ml-2">
+                          → {appointmentCount} appointment{appointmentCount !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {selectedTimeSlots.slice(0, 3).map(slot => 
+                        `${new Date(slot.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${slot.startTime}`
+                      ).join(', ')}
+                      {selectedTimeSlots.length > 3 && ` +${selectedTimeSlots.length - 3} more`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleBookTimeSlots}
+                    className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-lg transition-colors shadow-md hover:shadow-lg"
+                  >
+                    Create {appointmentCount} Appointment{appointmentCount !== 1 ? 's' : ''}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Error Message */}
@@ -252,6 +375,10 @@ export default function AppointmentsPage() {
             onPrevious={handlePrevious}
             onNext={handleNext}
             onToday={handleToday}
+            selectionMode={selectionMode}
+            selectedTimeSlots={selectedTimeSlots}
+            onToggleTimeSlot={handleToggleTimeSlot}
+            totalEngineers={Object.keys(engineerNames).length}
           />
         )}
 
@@ -263,6 +390,9 @@ export default function AppointmentsPage() {
             onPrevious={handlePrevious}
             onNext={handleNext}
             onToday={handleToday}
+            selectionMode={selectionMode}
+            selectedTimeSlots={selectedTimeSlots}
+            onToggleTimeSlot={handleToggleTimeSlot}
           />
         )}
 
@@ -274,6 +404,10 @@ export default function AppointmentsPage() {
             onPrevious={handlePrevious}
             onNext={handleNext}
             onToday={handleToday}
+            selectionMode={selectionMode}
+            selectedTimeSlots={selectedTimeSlots}
+            onToggleTimeSlot={handleToggleTimeSlot}
+            totalEngineers={Object.keys(engineerNames).length}
           />
         )}
       </div>
