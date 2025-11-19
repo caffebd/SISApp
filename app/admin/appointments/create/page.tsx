@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../../../../lib/firebase';
@@ -10,7 +10,7 @@ import ContactSearchModal from '../../../components/ContactSearchModal';
 
 const USER_ID = process.env.NEXT_PUBLIC_USER_ID || '1snBR67qkJQfZ68FoDAcM4GY8Qw2';
 
-export default function CreateAppointmentPage() {
+function CreateAppointmentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -583,5 +583,20 @@ export default function CreateAppointmentPage() {
         onSelectContact={handleSelectContact}
       />
     </div>
+  );
+}
+
+export default function CreateAppointmentPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+          <p className="font-medium text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <CreateAppointmentContent />
+    </Suspense>
   );
 }
