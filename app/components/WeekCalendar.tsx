@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import AppointmentBlock from './AppointmentBlock';
 import { assignColumnsByDate, getCommonPostcodeArea, fetchPostcodeAreaName } from '../../lib/calendarUtils';
 
@@ -49,6 +50,7 @@ export default function WeekCalendar({
   totalEngineers = 0,
   selectedEngineerId,
 }: WeekCalendarProps) {
+  const router = useRouter();
   // Drag selection state
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartSlot, setDragStartSlot] = useState<{ date: string; time: string } | null>(null);
@@ -350,10 +352,40 @@ export default function WeekCalendar({
                 const areaCode = getCommonPostcodeArea(postcodes);
 
                 const displayText = areaName ? `${areaName} (${areaCode})` : (areaCode || '-');
+                const hasArea = !!areaCode;
 
                 return (
-                  <div key={index} className="p-2 text-center border-l border-gray-200 text-sm font-bold text-indigo-700 whitespace-normal break-words leading-tight px-1" title={displayText}>
-                    {displayText}
+                  <div key={index} className="p-2 text-center border-l border-gray-200 text-sm font-bold text-indigo-700 whitespace-normal break-words leading-tight px-1 flex items-center justify-center gap-1" title={displayText}>
+                    {hasArea && (
+                      <div
+                        className="cursor-pointer hover:bg-indigo-100 p-1 rounded transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/admin/route-plan?date=${dateKey}&engineerId=${selectedEngineerId}`);
+                        }}
+                        title="Plan Route"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-800">
+                          <rect width="8" height="8" x="2" y="10" rx="2" />
+                          <path d="M10 10V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v8" />
+                          <path d="M14 18h2" />
+                          <path d="M6 18h2" />
+                          <circle cx="8" cy="18" r="2" />
+                          <circle cx="16" cy="18" r="2" />
+                        </svg>
+                      </div>
+                    )}
+                    <span
+                      className={hasArea ? "cursor-pointer hover:underline" : ""}
+                      onClick={(e) => {
+                        if (hasArea) {
+                          e.stopPropagation();
+                          router.push(`/admin/route-plan?date=${dateKey}&engineerId=${selectedEngineerId}`);
+                        }
+                      }}
+                    >
+                      {displayText}
+                    </span>
                   </div>
                 );
               })}

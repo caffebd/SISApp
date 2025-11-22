@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { doc, getDoc, updateDoc, deleteDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -37,6 +37,7 @@ interface Appointment {
 
 export default function AppointmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { id } = use(params);
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [engineerName, setEngineerName] = useState<string>('');
@@ -50,6 +51,19 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
   const [isCheckingMatch, setIsCheckingMatch] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Back link logic
+  const source = searchParams.get('source');
+  const returnDate = searchParams.get('returnDate');
+  const returnEngineer = searchParams.get('returnEngineer');
+
+  const backLinkHref = source === 'route-plan'
+    ? `/admin/route-plan?date=${returnDate}&engineerId=${returnEngineer}`
+    : '/admin/appointments';
+
+  const backLinkText = source === 'route-plan'
+    ? 'Back to Route Planning'
+    : 'Back to Appointments';
 
   // Form state
   const [editDate, setEditDate] = useState('');
@@ -121,31 +135,31 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
           },
         };
 
-    setAppointment(appt);
-    setEditStatus(appt.status);
-    setEditType(appt.appointmentType || '');
-    setEditEngineerId(appt.engineerId);
+        setAppointment(appt);
+        setEditStatus(appt.status);
+        setEditType(appt.appointmentType || '');
+        setEditEngineerId(appt.engineerId);
 
         // Parse date and times from ISO string
         const startDate = new Date(appt.start);
         const endDate = new Date(appt.end);
         setEditDate(appt.date);
-        
+
         // Convert start time to 12-hour format
         let startHours = startDate.getUTCHours();
         const startMinutes = startDate.getUTCMinutes();
         const startAmpm = startHours >= 12 ? 'PM' : 'AM';
         startHours = startHours % 12 || 12;
-        
+
         setEditStartTime(`${String(startHours).padStart(2, '0')}:${String(startMinutes).padStart(2, '0')}`);
         setEditStartAmPm(startAmpm);
-        
+
         // Convert end time to 12-hour format
         let endHours = endDate.getUTCHours();
         const endMinutes = endDate.getUTCMinutes();
         const endAmpm = endHours >= 12 ? 'PM' : 'AM';
         endHours = endHours % 12 || 12;
-        
+
         setEditEndTime(`${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`);
         setEditEndAmPm(endAmpm);
 
@@ -180,13 +194,13 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
       try {
         const contactsRef = collection(db, 'USERS', USER_ID, 'contacts');
         const querySnapshot = await getDocs(contactsRef);
-        
+
         const matchedContacts: Array<{ id: string; name: string; updatedAt: string }> = [];
-        
+
         querySnapshot.forEach((docSnapshot) => {
           const data = docSnapshot.data();
           const appointmentIds = data.appointmentIds || [];
-          
+
           if (appointmentIds.includes(id)) {
             matchedContacts.push({
               id: docSnapshot.id,
@@ -203,7 +217,7 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
             id: matchedContacts[0].id,
             name: matchedContacts[0].name,
           });
-          
+
           // Log warning if multiple matches found
           if (matchedContacts.length > 1) {
             console.warn('Multiple contacts found with same appointment ID:', {
@@ -238,13 +252,13 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
         try {
           const contactsRef = collection(db, 'USERS', USER_ID, 'contacts');
           const querySnapshot = await getDocs(contactsRef);
-          
+
           const matchedContacts: Array<{ id: string; name: string; updatedAt: string }> = [];
-          
+
           querySnapshot.forEach((docSnapshot) => {
             const data = docSnapshot.data();
             const appointmentIds = data.appointmentIds || [];
-            
+
             if (appointmentIds.includes(id)) {
               matchedContacts.push({
                 id: docSnapshot.id,
@@ -348,7 +362,7 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
   // Fetch engineers list and existing appointments
   useEffect(() => {
     if (!isAuthenticated) return;
-    
+
     const fetchData = async () => {
       setEngineersLoading(true);
       try {
@@ -361,7 +375,7 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
           engineersList.push({ id: docSnap.id, name: data.name || docSnap.id });
         });
         setEngineers(engineersList);
-        
+
         // If engineerId loaded earlier, ensure engineerName sync
         if (editEngineerId) {
           const eng = engineersList.find(e => e.id === editEngineerId);
@@ -393,39 +407,39 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
         setEngineersLoading(false);
       }
     };
-    
+
     fetchData();
   }, [isAuthenticated, editEngineerId]);
 
   // Check if an engineer is busy during the selected time
   const isEngineerBusy = (engineerId: string): boolean => {
     if (!engineerId || !editDate || !editStartTime || !editEndTime) return false;
-    
+
     // Convert selected start time to timestamp
     const [startHours, startMinutes] = editStartTime.split(':').map(Number);
     let startHour24 = startHours;
     if (editStartAmPm === 'PM' && startHours !== 12) startHour24 = startHours + 12;
     if (editStartAmPm === 'AM' && startHours === 12) startHour24 = 0;
     const slotStart = new Date(`${editDate}T${String(startHour24).padStart(2, '0')}:${String(startMinutes).padStart(2, '0')}:00`).getTime();
-    
+
     // Convert selected end time to timestamp
     const [endHours, endMinutes] = editEndTime.split(':').map(Number);
     let endHour24 = endHours;
     if (editEndAmPm === 'PM' && endHours !== 12) endHour24 = endHours + 12;
     if (editEndAmPm === 'AM' && endHours === 12) endHour24 = 0;
     const slotEnd = new Date(`${editDate}T${String(endHour24).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00`).getTime();
-    
+
     // Check if engineer has any appointment overlapping with this time
     return existingAppointments.some(apt => {
       // Skip the current appointment being edited
       if (apt.id === appointment?.id) return false;
-      
+
       // Only check appointments for this engineer
       if (apt.engineerId !== engineerId) return false;
-      
+
       const aptStart = new Date(apt.start).getTime();
       const aptEnd = new Date(apt.end).getTime();
-      
+
       // Check for overlap
       return aptStart < slotEnd && aptEnd > slotStart;
     });
@@ -437,12 +451,12 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
 
   const handleDeleteAppointment = async () => {
     if (!appointment) return;
-    
+
     setIsDeleting(true);
     try {
       const appointmentRef = doc(db, 'USERS', USER_ID, 'appointments', id);
       await deleteDoc(appointmentRef);
-      
+
       // Navigate back to appointments page
       router.push('/admin/appointments');
     } catch (err) {
@@ -460,10 +474,10 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
     // Format date and time for email
     const appointmentDate = new Date(editDate + 'T00:00:00');
     const dayName = appointmentDate.toLocaleDateString('en-US', { weekday: 'long' });
-    const dateFormatted = appointmentDate.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    const dateFormatted = appointmentDate.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
 
     const emailSubject = 'SIS Appointment';
@@ -536,13 +550,13 @@ SIS Team`;
         {/* Header */}
         <div className="mb-6">
           <Link
-            href="/admin/appointments"
+            href={backLinkHref}
             className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold mb-4"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Back to Appointments
+            {backLinkText}
           </Link>
 
           <div className="flex items-center justify-between">
@@ -585,7 +599,7 @@ SIS Team`;
           {/* Customer Information Card */}
           <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Customer Information</h2>
-            
+
             <div className="space-y-4">
               <div className="flex items-start gap-3">
                 <svg className="w-6 h-6 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -777,7 +791,7 @@ SIS Team`;
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-gray-900 font-medium bg-white"
                 >
                   <option value="">Unassigned</option>
-                  
+
                   {/* Available Engineers */}
                   {availableEngineers.length > 0 && (
                     <optgroup label="Available">
@@ -791,7 +805,7 @@ SIS Team`;
                       })}
                     </optgroup>
                   )}
-                  
+
                   {/* Busy Engineers - Disabled */}
                   {busyEngineers.length > 0 && (
                     <optgroup label="Busy (Not Available)">
@@ -803,19 +817,19 @@ SIS Team`;
                     </optgroup>
                   )}
                 </select>
-                
+
                 {busyEngineers.length > 0 && (
                   <p className="mt-2 text-sm text-amber-600">
                     ⚠️ {busyEngineers.length} engineer{busyEngineers.length !== 1 ? 's are' : ' is'} busy during this time slot
                   </p>
                 )}
-                
+
                 {editEngineerId && isEngineerBusy(editEngineerId) && (
                   <p className="mt-2 text-sm text-blue-600">
                     ℹ️ Currently assigned engineer has overlapping appointments. Consider reassigning or adjusting time.
                   </p>
                 )}
-                
+
                 {availableEngineers.length === 0 && engineers.length > 0 && (
                   <p className="mt-2 text-sm text-red-600 font-medium">
                     ⚠️ All engineers are busy during this time slot. Adjust time/date to free up slots.
@@ -824,22 +838,22 @@ SIS Team`;
               </div>
 
               {/* Appointment Type Field */}
-                  {/* Appointment Type Field */}
-                  <div>
-                    <label htmlFor="edit-type" className="block text-sm font-semibold text-gray-700 mb-2">
-                      Appointment Type
-                    </label>
-                    <input
-                      id="edit-type"
-                      type="text"
-                      value={editType}
-                      onChange={(e) => setEditType(e.target.value)}
-                      placeholder="e.g. visit, survey, install"
-                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-gray-900 font-medium bg-white"
-                    />
-                  </div>
+              {/* Appointment Type Field */}
+              <div>
+                <label htmlFor="edit-type" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Appointment Type
+                </label>
+                <input
+                  id="edit-type"
+                  type="text"
+                  value={editType}
+                  onChange={(e) => setEditType(e.target.value)}
+                  placeholder="e.g. visit, survey, install"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 text-gray-900 font-medium bg-white"
+                />
+              </div>
 
-                  {/* Status Dropdown */}
+              {/* Status Dropdown */}
               <div>
                 <label htmlFor="edit-status" className="block text-sm font-semibold text-gray-700 mb-2">
                   Status

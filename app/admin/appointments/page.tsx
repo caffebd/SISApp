@@ -64,6 +64,37 @@ export default function AppointmentsPage() {
     return monday;
   });
 
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Load saved state from localStorage on mount
+  useEffect(() => {
+    const savedViewMode = localStorage.getItem('calendar_view_mode') as ViewMode;
+    const savedEngineerId = localStorage.getItem('calendar_engineer_id');
+    const savedDate = localStorage.getItem('calendar_current_date');
+
+    if (savedViewMode) setViewMode(savedViewMode);
+    if (savedEngineerId) setSelectedEngineerId(savedEngineerId);
+    if (savedDate) setCurrentDate(new Date(savedDate));
+
+    setIsLoaded(true);
+  }, []);
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    if (!isLoaded) return;
+    localStorage.setItem('calendar_view_mode', viewMode);
+  }, [viewMode, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    localStorage.setItem('calendar_engineer_id', selectedEngineerId);
+  }, [selectedEngineerId, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    localStorage.setItem('calendar_current_date', currentDate.toISOString());
+  }, [currentDate, isLoaded]);
+
   // Check authentication
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
