@@ -29,6 +29,12 @@ interface Contact {
   type: string;
   status: string;
   disableCommunication: boolean;
+  additionalContacts?: Array<{
+    name: string;
+    phone: string;
+    email: string;
+    relationship: string;
+  }>;
 }
 
 interface ContactFormProps {
@@ -50,7 +56,7 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
 
   // Customer Status
   const [customerStatus, setCustomerStatus] = useState('Normal');
-  
+
   // Contact Type (Customer/Supplier)
   const [isCustomer, setIsCustomer] = useState(true);
   const [isSupplier, setIsSupplier] = useState(false);
@@ -74,29 +80,46 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
   // Communication
   const [disableCommunication, setDisableCommunication] = useState(false);
 
+  // Additional Contacts
+  const [additionalContacts, setAdditionalContacts] = useState<Array<{
+    name: string;
+    phone: string;
+    email: string;
+    relationship: string;
+  }>>([]);
+  const [showAddContactModal, setShowAddContactModal] = useState(false);
+  const [editingContactIndex, setEditingContactIndex] = useState<number | null>(null);
+
+  // Additional Contact Form State
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactPhone, setNewContactPhone] = useState('');
+  const [newContactEmail, setNewContactEmail] = useState('');
+  const [newContactRelationship, setNewContactRelationship] = useState('');
+  const [expandedContactIndex, setExpandedContactIndex] = useState<number | null>(null);
+
   // Parse name and extract title
   const parseNameWithTitle = (fullName: string) => {
     const titles = ['Mr', 'Mrs', 'Miss', 'Ms', 'Dr', 'Prof'];
     const nameParts = fullName.trim().split(/\s+/);
-    
+
     let extractedTitle = '';
     let firstName = '';
     let lastName = '';
-    
+
     // Check if first part is a title
     if (nameParts.length > 0) {
       const firstPart = nameParts[0];
-      const matchedTitle = titles.find(t => 
-        firstPart.toLowerCase() === t.toLowerCase() || 
+      const matchedTitle = titles.find(t =>
+        firstPart.toLowerCase() === t.toLowerCase() ||
         firstPart.toLowerCase() === t.toLowerCase() + '.'
       );
-      
+
       if (matchedTitle) {
         extractedTitle = matchedTitle;
         nameParts.shift(); // Remove title from array
       }
     }
-    
+
     // Split remaining parts into first and last name
     if (nameParts.length === 1) {
       firstName = nameParts[0];
@@ -104,7 +127,7 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
       firstName = nameParts[0];
       lastName = nameParts.slice(1).join(' ');
     }
-    
+
     return { title: extractedTitle, firstName, lastName };
   };
 
@@ -112,7 +135,7 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
   const searchParams = useSearchParams();
   useEffect(() => {
     const fromAppointment = searchParams.get('fromAppointment');
-    
+
     if (fromAppointment === 'true') {
       const name = searchParams.get('name');
       const address = searchParams.get('address');
@@ -121,17 +144,17 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
       const phone = searchParams.get('phone');
       const appointmentId = searchParams.get('appointmentId');
       const oldContactId = searchParams.get('oldContactId');
-      
+
       // Store appointment ID to link after creation
       if (appointmentId) {
         setAppointmentIdToLink(appointmentId);
       }
-      
+
       // Store old contact ID to unlink
       if (oldContactId) {
         setOldContactIdToUnlink(oldContactId);
       }
-      
+
       // Parse name with title
       if (name) {
         const { title: parsedTitle, firstName: parsedFirstName, lastName: parsedLastName } = parseNameWithTitle(name);
@@ -139,12 +162,12 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
         setFirstName(parsedFirstName);
         setLastName(parsedLastName);
       }
-      
+
       if (address) setAddress1(address);
       if (postcode) setPostcode(postcode);
       if (email) setEmail(email);
       if (phone) setMobile(phone);
-      
+
       // Auto-select Customer type
       setIsCustomer(true);
       setIsSupplier(false);
@@ -169,7 +192,9 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
       setAddress2(contactData.address_2 || '');
       setTown(contactData.town || '');
       setCounty(contactData.county || '');
+      setCounty(contactData.county || '');
       setDisableCommunication(contactData.disableCommunication || false);
+      setAdditionalContacts(contactData.additionalContacts || []);
     }
   }, [isEdit, contactData]);
 
@@ -194,7 +219,7 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
   const handleCompanySelect = (company: CompanySearchResult) => {
     setSelectedCompany(company);
     setCompany(company.title || '');
-    
+
     // Set address from company
     if (company.registered_office_address) {
       const addr = company.registered_office_address;
@@ -205,7 +230,7 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
       setCounty(addr.region || '');
       setCountry(addr.country || 'UNITED KINGDOM');
     }
-    
+
     setShowCompanyLookup(false);
     setShowDirectorSelect(true);
   };
@@ -216,16 +241,16 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
     console.log('🔍 Director selected:', officer.name);
     console.log('🏢 Company name to keep:', companyNameToKeep);
     console.log('📦 Selected company object:', selectedCompany);
-    
+
     // Parse the director's name first
     if (officer.name) {
       const nameParts = officer.name.split(',').map(s => s.trim());
-      
+
       if (nameParts.length >= 2) {
         // Format is usually "SURNAME, Firstname [Title]"
         const surname = nameParts[0];
         const firstNamePart = nameParts[1];
-        
+
         // Extract title if present
         const titleMatch = firstNamePart.match(/\b(Mr|Mrs|Miss|Ms|Dr|Prof)\b/i);
         if (titleMatch) {
@@ -234,7 +259,7 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
         } else {
           setFirstName(firstNamePart);
         }
-        
+
         setLastName(surname);
       } else {
         // Just set the full name
@@ -252,19 +277,103 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
         if (addr.country) setCountry(addr.country || 'UNITED KINGDOM');
       }
     }
-    
+
     // CRITICAL: Set company name LAST to ensure it's not overwritten
     if (companyNameToKeep) {
       console.log('✅ Setting company name to:', companyNameToKeep);
       setCompany(companyNameToKeep);
     }
-    
+
     setShowDirectorSelect(false);
   };
 
   const handleBackToCompanyList = () => {
     setShowDirectorSelect(false);
     setShowCompanyLookup(true);
+  };
+
+  // Additional Contact Handlers
+  const handleAddContactClick = () => {
+    setEditingContactIndex(null);
+    setNewContactName('');
+    setNewContactPhone('');
+    setNewContactEmail('');
+    setNewContactRelationship('');
+    setShowAddContactModal(true);
+  };
+
+  const handleEditContactClick = (index: number) => {
+    const contact = additionalContacts[index];
+    setEditingContactIndex(index);
+    setNewContactName(contact.name);
+    setNewContactPhone(contact.phone);
+    setNewContactEmail(contact.email);
+    setNewContactRelationship(contact.relationship);
+    setShowAddContactModal(true);
+  };
+
+  const handleSaveAdditionalContact = async () => {
+    if (!newContactName) return; // Basic validation
+
+    const newContact = {
+      name: newContactName,
+      phone: newContactPhone,
+      email: newContactEmail,
+      relationship: newContactRelationship,
+    };
+
+    let updatedContacts = [...additionalContacts];
+
+    if (editingContactIndex !== null) {
+      // Update existing
+      updatedContacts[editingContactIndex] = newContact;
+    } else {
+      // Add new
+      updatedContacts.push(newContact);
+    }
+
+    setAdditionalContacts(updatedContacts);
+    setShowAddContactModal(false);
+
+    // Immediate save if editing an existing contact
+    if (isEdit && contactData?.id) {
+      try {
+        const contactRef = doc(db, 'USERS', USER_ID, 'contacts', contactData.id);
+        await updateDoc(contactRef, {
+          additionalContacts: updatedContacts,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error("Error auto-saving additional contact:", err);
+        setError("Failed to auto-save additional contact. Please try updating the main form.");
+      }
+    }
+  };
+
+  const handleDeleteAdditionalContact = async (index: number) => {
+    if (window.confirm('Are you sure you want to remove this contact?')) {
+      const updatedContacts = additionalContacts.filter((_, i) => i !== index);
+      setAdditionalContacts(updatedContacts);
+      if (expandedContactIndex === index) setExpandedContactIndex(null);
+
+      // Immediate save if editing an existing contact
+      if (isEdit && contactData?.id) {
+        try {
+          const contactRef = doc(db, 'USERS', USER_ID, 'contacts', contactData.id);
+          await updateDoc(contactRef, {
+            additionalContacts: updatedContacts,
+            updatedAt: new Date().toISOString()
+          });
+        } catch (err) {
+          console.error("Error auto-saving after delete:", err);
+          setError("Failed to auto-save changes. Please try updating the main form.");
+        }
+      }
+    }
+  };
+
+  const toggleContactAccordion = (index: number) => {
+    setExpandedContactIndex(expandedContactIndex === index ? null : index);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -301,6 +410,7 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
         type: isCustomer ? 'customer' : 'supplier',
         status: customerStatus.toLowerCase(),
         disableCommunication,
+        additionalContacts,
         updatedAt: new Date().toISOString(),
       };
 
@@ -308,7 +418,7 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
         // Update existing contact
         const contactRef = doc(db, 'USERS', USER_ID, 'contacts', contactData.id);
         await updateDoc(contactRef, contactPayload);
-        
+
         // Redirect back to contacts page
         router.push('/admin/contacts');
       } else {
@@ -356,7 +466,7 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
       <div className="max-w-6xl mx-auto px-4">
         {/* Header */}
         <div className="mb-8">
-          <Link 
+          <Link
             href="/admin/contacts"
             className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold mb-4"
           >
@@ -365,7 +475,7 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
             </svg>
             Back to Contacts
           </Link>
-          
+
           <h1 className="text-4xl font-bold text-gray-900">
             {isEdit ? 'Edit Contact' : 'Add New Contact'}
           </h1>
@@ -427,15 +537,13 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
                   <button
                     type="button"
                     onClick={handleCustomerToggle}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors ${
-                      isCustomer
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors ${isCustomer
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
                   >
-                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                      isCustomer ? 'border-white bg-white' : 'border-gray-400'
-                    }`}>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isCustomer ? 'border-white bg-white' : 'border-gray-400'
+                      }`}>
                       {isCustomer && (
                         <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -448,15 +556,13 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
                   <button
                     type="button"
                     onClick={handleSupplierToggle}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors ${
-                      isSupplier
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors ${isSupplier
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
                   >
-                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                      isSupplier ? 'border-white bg-white' : 'border-gray-400'
-                    }`}>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isSupplier ? 'border-white bg-white' : 'border-gray-400'
+                      }`}>
                       {isSupplier && (
                         <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -674,6 +780,93 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
             </div>
           </div>
 
+          {/* Additional Contacts Section */}
+          <div className="mt-8">
+            <div className="bg-white rounded-xl shadow-md p-6 border-2 border-gray-100">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-bold text-green-600">Additional Contacts</h2>
+                <button
+                  type="button"
+                  onClick={handleAddContactClick}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg font-semibold transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Contact
+                </button>
+              </div>
+
+              {additionalContacts.length === 0 ? (
+                <p className="text-gray-500 text-center py-4 italic">No additional contacts added.</p>
+              ) : (
+                <div className="space-y-3">
+                  {additionalContacts.map((contact, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div
+                        className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                        onClick={() => toggleContactAccordion(index)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-bold">
+                            {contact.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-gray-900">{contact.name}</h3>
+                            <p className="text-sm text-gray-500">{contact.relationship}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleEditContactClick(index); }}
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                            title="Edit"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteAdditionalContact(index); }}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                            title="Delete"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                          <svg
+                            className={`w-5 h-5 text-gray-400 transition-transform ${expandedContactIndex === index ? 'rotate-180' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      {expandedContactIndex === index && (
+                        <div className="p-4 bg-white border-t border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Email</p>
+                            <p className="text-gray-900">{contact.email || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Phone</p>
+                            <p className="text-gray-900">{contact.phone || '-'}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Submit Button */}
           <div className="mt-8 flex justify-end gap-4">
             <Link
@@ -708,6 +901,98 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
           company={selectedCompany}
           onBackToCompanyList={handleBackToCompanyList}
         />
+        {/* Add/Edit Contact Modal */}
+        {showAddContactModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-900">
+                  {editingContactIndex !== null ? 'Edit Contact' : 'Add Additional Contact'}
+                </h3>
+                <button
+                  onClick={() => setShowAddContactModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newContactName}
+                    onChange={(e) => setNewContactName(e.target.value)}
+                    placeholder="e.g. Jane Doe"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Relationship
+                  </label>
+                  <input
+                    type="text"
+                    value={newContactRelationship}
+                    onChange={(e) => setNewContactRelationship(e.target.value)}
+                    placeholder="e.g. Wife, Husband, Partner"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={newContactPhone}
+                    onChange={(e) => setNewContactPhone(e.target.value)}
+                    placeholder="e.g. 07123 456789"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={newContactEmail}
+                    onChange={(e) => setNewContactEmail(e.target.value)}
+                    placeholder="e.g. jane@example.com"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+
+              <div className="p-6 bg-gray-50 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddContactModal(false)}
+                  className="px-4 py-2 text-gray-700 font-semibold hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAdditionalContact}
+                  disabled={!newContactName}
+                  className="px-6 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {editingContactIndex !== null ? 'Save Changes' : 'Add Contact'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

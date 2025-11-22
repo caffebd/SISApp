@@ -30,6 +30,12 @@ interface Contact {
   disableCommunication: boolean;
   appointmentIds?: string[];
   addressLocation?: { lat: number; lng: number };
+  additionalContacts?: Array<{
+    name: string;
+    phone: string;
+    email: string;
+    relationship: string;
+  }>;
 }
 
 interface RelatedAppointment {
@@ -44,7 +50,7 @@ export default function ContactDetailsPage() {
   const router = useRouter();
   const params = useParams();
   const contactId = params.id as string;
-  
+
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,6 +70,12 @@ export default function ContactDetailsPage() {
   const mapsLoaderRef = useRef<Promise<void> | null>(null);
   const markerInstanceRef = useRef<any>(null);
   const mapId: string | undefined = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID as string | undefined;
+
+  const [expandedContactIndex, setExpandedContactIndex] = useState<number | null>(null);
+
+  const toggleContactAccordion = (index: number) => {
+    setExpandedContactIndex(expandedContactIndex === index ? null : index);
+  };
 
   // Check authentication
   useEffect(() => {
@@ -214,11 +226,11 @@ export default function ContactDetailsPage() {
 
   const handleDeleteConfirm = async () => {
     setIsDeleting(true);
-    
+
     try {
       const contactRef = doc(db, 'USERS', USER_ID, 'contacts', contactId);
       await deleteDoc(contactRef);
-      
+
       // Navigate back to contacts list
       router.push('/admin/contacts');
     } catch (error) {
@@ -426,329 +438,388 @@ export default function ContactDetailsPage() {
       {/* Main content when contact is loaded */}
       {isAuthenticated && !loading && contact && (
         <div className="max-w-4xl mx-auto px-4">
-        {/* Header */}
-        <div className="mb-8">
-          <Link 
-            href="/admin/contacts"
-            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold mb-4"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Contacts
-          </Link>
-        </div>
+          {/* Header */}
+          <div className="mb-8">
+            <Link
+              href="/admin/contacts"
+              className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold mb-4"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to Contacts
+            </Link>
+          </div>
 
-        {/* Top Card - Contact Details */}
-        <div className="bg-white rounded-xl shadow-md p-6 border-2 border-gray-100 mb-6">
-          <div className="flex items-start justify-between mb-6">
-            <div className="flex items-center gap-4">
-              {/* Avatar */}
-              <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                </svg>
+          {/* Top Card - Contact Details */}
+          <div className="bg-white rounded-xl shadow-md p-6 border-2 border-gray-100 mb-6">
+            <div className="flex items-start justify-between mb-6">
+              <div className="flex items-center gap-4">
+                {/* Avatar */}
+                <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                  </svg>
+                </div>
+
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900">{contact.name}</h1>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-700">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {contact.type.charAt(0).toUpperCase() + contact.type.slice(1)}
+                    </span>
+                  </div>
+                </div>
               </div>
-              
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">{contact.name}</h1>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 rounded-full text-sm font-medium text-gray-700">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    {contact.type.charAt(0).toUpperCase() + contact.type.slice(1)}
+
+              {/* Edit and Delete Icons */}
+              <div className="flex gap-2">
+                <Link
+                  href={`/admin/contacts/${contactId}/edit`}
+                  className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-md hover:shadow-lg"
+                  title="Edit Contact"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </Link>
+
+                <button
+                  onClick={handleDeleteClick}
+                  className="p-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors shadow-md hover:shadow-lg"
+                  title="Delete Contact"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Contact Information */}
+            <div className="space-y-4">
+              {isCompany && (
+                <div>
+                  <h3 className="text-sm font-semibold text-green-600 mb-1">Company</h3>
+                  <p className="text-gray-900">{contact.company}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {contact.title && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-green-600 mb-1">Title & Full Name</h3>
+                    <p className="text-gray-900">{contact.name}</p>
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="text-sm font-semibold text-green-600 mb-1">Customer Status</h3>
+                  <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${contact.status === 'normal' ? 'bg-green-100 text-green-800' :
+                    contact.status === 'risky' ? 'bg-red-100 text-red-800' :
+                      'bg-purple-100 text-purple-800'
+                    }`}>
+                    {contact.status.charAt(0).toUpperCase() + contact.status.slice(1)}
                   </span>
                 </div>
               </div>
-            </div>
 
-            {/* Edit and Delete Icons */}
-            <div className="flex gap-2">
-              <Link
-                href={`/admin/contacts/${contactId}/edit`}
-                className="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-md hover:shadow-lg"
-                title="Edit Contact"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-              </Link>
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold text-green-600 mb-3">Main Contact</h3>
 
-              <button
-                onClick={handleDeleteClick}
-                className="p-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors shadow-md hover:shadow-lg"
-                title="Delete Contact"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            </div>
-          </div>
+                <div className="space-y-2">
+                  {contact.mobile && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-700 w-32">Mobile (SMS)</span>
+                      <span className="text-gray-900">{contact.mobile}</span>
+                    </div>
+                  )}
 
-          {/* Contact Information */}
-          <div className="space-y-4">
-            {isCompany && (
-              <div>
-                <h3 className="text-sm font-semibold text-green-600 mb-1">Company</h3>
-                <p className="text-gray-900">{contact.company}</p>
+                  {contact.email && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-700 w-32">Email</span>
+                      <a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">
+                        {contact.email}
+                      </a>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {contact.title && (
-                <div>
-                  <h3 className="text-sm font-semibold text-green-600 mb-1">Title & Full Name</h3>
-                  <p className="text-gray-900">{contact.name}</p>
+              {contact.disableCommunication && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                  </svg>
+                  <span className="text-sm font-medium text-red-800">Communication disabled with this customer</span>
                 </div>
               )}
-
-              <div>
-                <h3 className="text-sm font-semibold text-green-600 mb-1">Customer Status</h3>
-                <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${
-                  contact.status === 'normal' ? 'bg-green-100 text-green-800' :
-                  contact.status === 'risky' ? 'bg-red-100 text-red-800' :
-                  'bg-purple-100 text-purple-800'
-                }`}>
-                  {contact.status.charAt(0).toUpperCase() + contact.status.slice(1)}
-                </span>
-              </div>
             </div>
 
-            <div className="border-t pt-4">
-              <h3 className="text-sm font-semibold text-green-600 mb-3">Main Contact</h3>
-              
-              <div className="space-y-2">
-                {contact.mobile && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-700 w-32">Mobile (SMS)</span>
-                    <span className="text-gray-900">{contact.mobile}</span>
-                  </div>
-                )}
-                
-                {contact.email && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-700 w-32">Email</span>
-                    <a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">
-                      {contact.email}
-                    </a>
-                  </div>
-                )}
-              </div>
-            </div>
+            {/* Additional Contacts */}
+            {contact.additionalContacts && contact.additionalContacts.length > 0 && (
+              <div className="mt-6 border-t pt-4">
+                <h3 className="text-sm font-semibold text-green-600 mb-3">Additional Contacts</h3>
+                <div className="space-y-3">
+                  {contact.additionalContacts.map((ac, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div
+                        className="flex items-center justify-between p-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                        onClick={() => toggleContactAccordion(index)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-bold text-sm">
+                            {ac.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-gray-900 text-sm">{ac.name}</h4>
+                            <p className="text-xs text-gray-500">{ac.relationship}</p>
+                          </div>
+                        </div>
+                        <svg
+                          className={`w-5 h-5 text-gray-400 transition-transform ${expandedContactIndex === index ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
 
-            {contact.disableCommunication && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
-                <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      <div
+                        className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${expandedContactIndex === index ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                          }`}
+                      >
+                        <div className="overflow-hidden">
+                          <div className="p-3 bg-white border-t border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Phone</p>
+                              <p className="text-gray-900">{ac.phone || '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Email</p>
+                              {ac.email ? (
+                                <a href={`mailto:${ac.email}`} className="text-blue-600 hover:underline">
+                                  {ac.email}
+                                </a>
+                              ) : (
+                                <span className="text-gray-900">-</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Card - Address */}
+          <div className="bg-white rounded-xl shadow-md p-6 border-2 border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                <span className="text-sm font-medium text-red-800">Communication disabled with this customer</span>
+                <h2 className="text-xl font-bold text-green-600">Main Address</h2>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setViewMode('map')}
+                  className={`px-4 py-2 font-semibold rounded-lg transition-colors ${viewMode === 'map'
+                    ? 'bg-green-700 text-white'
+                    : 'bg-green-600 hover:bg-green-700 text-white'
+                    }`}
+                >
+                  Map View
+                </button>
+                <button
+                  onClick={() => setViewMode('street')}
+                  className={`px-4 py-2 font-semibold rounded-lg transition-colors ${viewMode === 'street'
+                    ? 'bg-green-700 text-white'
+                    : 'bg-green-600 hover:bg-green-700 text-white'
+                    }`}
+                >
+                  Street View
+                </button>
+                {/* Directions link opens Google Maps in a new tab */}
+                <a
+                  href={(function () {
+                    const destination = coords
+                      ? `${coords.lat},${coords.lng}`
+                      : encodeURIComponent(fullAddress());
+                    return `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
+                  })()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors inline-flex items-center gap-2"
+                  title="Open directions in Google Maps"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  Directions
+                </a>
+                {viewMode !== 'none' && (
+                  <button
+                    onClick={() => setViewMode('none')}
+                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg transition-colors"
+                  >
+                    Close
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1 text-gray-900">
+              {contact.address_1 && <p>{contact.address_1}</p>}
+              {contact.address_2 && <p>{contact.address_2}</p>}
+              {contact.town && <p>{contact.town}</p>}
+              {contact.postcode && <p className="font-semibold text-blue-600">{contact.postcode}</p>}
+              {contact.county && <p>{contact.county}</p>}
+              {contact.country && <p>{contact.country}</p>}
+            </div>
+
+            {/* Map / Street View container (always mounted to preserve instances) */}
+            <div className={`mt-4 transition-opacity ${viewMode === 'none' ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100'} `}>
+              <div className={`relative w-full ${viewMode === 'none' ? 'h-0' : 'h-96'} rounded-lg overflow-hidden border border-gray-200`}>
+                <div
+                  ref={mapDivRef}
+                  className={`${viewMode === 'map' ? 'block' : 'hidden'} w-full h-full`}
+                />
+                <div
+                  ref={streetDivRef}
+                  className={`${viewMode === 'street' ? 'block' : 'hidden'} w-full h-full`}
+                />
+              </div>
+              <div className="flex items-center gap-3 mt-2 min-h-[1.5rem]">
+                {mapLoading && (
+                  <span className="text-sm text-gray-600">Loading…</span>
+                )}
+                {mapError && (
+                  <span className="text-sm text-red-600">{mapError}</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Upcoming Appointments */}
+          <div className="bg-white rounded-xl shadow-md p-6 border-2 border-gray-100 mt-6">
+            <div className="flex items-center gap-2 mb-4">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <h2 className="text-xl font-bold text-green-600">Upcoming Appointments</h2>
+            </div>
+
+            {loadingAppointments ? (
+              <div className="text-gray-500">Loading appointments…</div>
+            ) : upcomingAppointments.length === 0 ? (
+              <div className="text-gray-600">No upcoming appointments for this contact.</div>
+            ) : (
+              <div className="divide-y">
+                {upcomingAppointments.map((apt) => (
+                  <Link key={apt.id} href={`/admin/appointments/${apt.id}`} className="block py-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-500">{formatDisplayDate(apt.date)}</p>
+                        <p className="text-base font-medium text-gray-900">{apt.start ? formatDisplayTime(apt.start) : '—'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-500">Engineer</p>
+                        <p className="text-base font-semibold text-gray-900">{apt.engineerName || apt.engineerId || 'Not assigned'}</p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Past Appointments */}
+          <div className="bg-white rounded-xl shadow-md p-6 border-2 border-gray-100 mt-6">
+            <div className="flex items-center gap-2 mb-4">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <h2 className="text-xl font-bold text-green-600">Past Appointments</h2>
+            </div>
+
+            {loadingAppointments ? (
+              <div className="text-gray-500">Loading appointments…</div>
+            ) : pastAppointments.length === 0 ? (
+              <div className="text-gray-600">No past appointments found for this contact.</div>
+            ) : (
+              <div className="divide-y">
+                {pastAppointments.map((apt) => (
+                  <Link key={apt.id} href={`/admin/appointments/${apt.id}`} className="block py-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-500">{formatDisplayDate(apt.date)}</p>
+                        <p className="text-base font-medium text-gray-900">{apt.start ? formatDisplayTime(apt.start) : '—'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-500">Engineer</p>
+                        <p className="text-base font-semibold text-gray-900">{apt.engineerName || apt.engineerId || 'Not assigned'}</p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
               </div>
             )}
           </div>
         </div>
-
-        {/* Bottom Card - Address */}
-        <div className="bg-white rounded-xl shadow-md p-6 border-2 border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <h2 className="text-xl font-bold text-green-600">Main Address</h2>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => setViewMode('map')}
-                className={`px-4 py-2 font-semibold rounded-lg transition-colors ${
-                  viewMode === 'map'
-                    ? 'bg-green-700 text-white'
-                    : 'bg-green-600 hover:bg-green-700 text-white'
-                }`}
-              >
-                Map View
-              </button>
-              <button
-                onClick={() => setViewMode('street')}
-                className={`px-4 py-2 font-semibold rounded-lg transition-colors ${
-                  viewMode === 'street'
-                    ? 'bg-green-700 text-white'
-                    : 'bg-green-600 hover:bg-green-700 text-white'
-                }`}
-              >
-                Street View
-              </button>
-              {/* Directions link opens Google Maps in a new tab */}
-              <a
-                href={(function() {
-                  const destination = coords
-                    ? `${coords.lat},${coords.lng}`
-                    : encodeURIComponent(fullAddress());
-                  return `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
-                })()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors inline-flex items-center gap-2"
-                title="Open directions in Google Maps"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-                Directions
-              </a>
-              {viewMode !== 'none' && (
-                <button
-                  onClick={() => setViewMode('none')}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg transition-colors"
-                >
-                  Close
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-1 text-gray-900">
-            {contact.address_1 && <p>{contact.address_1}</p>}
-            {contact.address_2 && <p>{contact.address_2}</p>}
-            {contact.town && <p>{contact.town}</p>}
-            {contact.postcode && <p className="font-semibold text-blue-600">{contact.postcode}</p>}
-            {contact.county && <p>{contact.county}</p>}
-            {contact.country && <p>{contact.country}</p>}
-          </div>
-
-          {/* Map / Street View container (always mounted to preserve instances) */}
-          <div className={`mt-4 transition-opacity ${viewMode === 'none' ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100'} `}>
-            <div className={`relative w-full ${viewMode === 'none' ? 'h-0' : 'h-96'} rounded-lg overflow-hidden border border-gray-200`}>
-              <div
-                ref={mapDivRef}
-                className={`${viewMode === 'map' ? 'block' : 'hidden'} w-full h-full`}
-              />
-              <div
-                ref={streetDivRef}
-                className={`${viewMode === 'street' ? 'block' : 'hidden'} w-full h-full`}
-              />
-            </div>
-            <div className="flex items-center gap-3 mt-2 min-h-[1.5rem]">
-              {mapLoading && (
-                <span className="text-sm text-gray-600">Loading…</span>
-              )}
-              {mapError && (
-                <span className="text-sm text-red-600">{mapError}</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Upcoming Appointments */}
-        <div className="bg-white rounded-xl shadow-md p-6 border-2 border-gray-100 mt-6">
-          <div className="flex items-center gap-2 mb-4">
-            <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <h2 className="text-xl font-bold text-green-600">Upcoming Appointments</h2>
-          </div>
-
-          {loadingAppointments ? (
-            <div className="text-gray-500">Loading appointments…</div>
-          ) : upcomingAppointments.length === 0 ? (
-            <div className="text-gray-600">No upcoming appointments for this contact.</div>
-          ) : (
-            <div className="divide-y">
-              {upcomingAppointments.map((apt) => (
-                <Link key={apt.id} href={`/admin/appointments/${apt.id}`} className="block py-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-500">{formatDisplayDate(apt.date)}</p>
-                      <p className="text-base font-medium text-gray-900">{apt.start ? formatDisplayTime(apt.start) : '—'}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500">Engineer</p>
-                      <p className="text-base font-semibold text-gray-900">{apt.engineerName || apt.engineerId || 'Not assigned'}</p>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Past Appointments */}
-        <div className="bg-white rounded-xl shadow-md p-6 border-2 border-gray-100 mt-6">
-          <div className="flex items-center gap-2 mb-4">
-            <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <h2 className="text-xl font-bold text-green-600">Past Appointments</h2>
-          </div>
-
-          {loadingAppointments ? (
-            <div className="text-gray-500">Loading appointments…</div>
-          ) : pastAppointments.length === 0 ? (
-            <div className="text-gray-600">No past appointments found for this contact.</div>
-          ) : (
-            <div className="divide-y">
-              {pastAppointments.map((apt) => (
-                <Link key={apt.id} href={`/admin/appointments/${apt.id}`} className="block py-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-500">{formatDisplayDate(apt.date)}</p>
-                      <p className="text-base font-medium text-gray-900">{apt.start ? formatDisplayTime(apt.start) : '—'}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500">Engineer</p>
-                      <p className="text-base font-semibold text-gray-900">{apt.engineerName || apt.engineerId || 'Not assigned'}</p>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-        </div>
-      )}
+      )
+      }
 
       {/* Delete Confirmation Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6">
-            {/* Warning Header */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
+      {
+        showDeleteModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6">
+              {/* Warning Header */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">WARNING</h2>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900">WARNING</h2>
-            </div>
 
-            {/* Message */}
-            <p className="text-gray-700 mb-6 text-lg">
-              Are you sure you want to delete this contact?
-            </p>
+              {/* Message */}
+              <p className="text-gray-700 mb-6 text-lg">
+                Are you sure you want to delete this contact?
+              </p>
 
-            {/* Buttons */}
-            <div className="flex gap-3">
-              <button
-                onClick={handleDeleteCancel}
-                disabled={isDeleting}
-                className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors"
-              >
-                CANCEL
-              </button>
-              <button
-                onClick={handleDeleteConfirm}
-                disabled={isDeleting}
-                className="flex-1 px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors"
-              >
-                {isDeleting ? 'DELETING...' : 'DELETE'}
-              </button>
+              {/* Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDeleteCancel}
+                  disabled={isDeleting}
+                  className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors"
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  disabled={isDeleting}
+                  className="flex-1 px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors"
+                >
+                  {isDeleting ? 'DELETING...' : 'DELETE'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

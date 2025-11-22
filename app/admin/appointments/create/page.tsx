@@ -4,9 +4,10 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../../../../lib/firebase';
-import { collection, addDoc, getDocs } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, where } from 'firebase/firestore';
 import Link from 'next/link';
 import ContactSearchModal from '../../../components/ContactSearchModal';
+import { useRef } from 'react';
 
 const USER_ID = process.env.NEXT_PUBLIC_USER_ID || '1snBR67qkJQfZ68FoDAcM4GY8Qw2';
 
@@ -15,16 +16,16 @@ function CreateAppointmentContent() {
   const searchParams = useSearchParams();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
-  
+
   // Parse URL parameters - now expecting time slots instead of dates
   const slotsParam = searchParams.get('slots') || '';
   const selectedTimeSlots = slotsParam
     ? decodeURIComponent(slotsParam).split(',').map(slot => {
-        const [date, startTime, endTime] = slot.split('|');
-        return { date, startTime, endTime };
-      }).filter(slot => slot.date && slot.startTime && slot.endTime)
+      const [date, startTime, endTime] = slot.split('|');
+      return { date, startTime, endTime };
+    }).filter(slot => slot.date && slot.startTime && slot.endTime)
     : [];
-  
+
   // Form state
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -40,12 +41,18 @@ function CreateAppointmentContent() {
     start: string;
     end: string;
   }>>([]);
+
+  // Appointment Types state
+  const [savedTypes, setSavedTypes] = useState<Array<{ id: string; name: string }>>([]);
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successCount, setSuccessCount] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
   const [createdAppointments, setCreatedAppointments] = useState<Array<{ date: string; startTime: string; endTime: string }>>([]);
-  
+
   // Contact search modal state
   const [showContactSearch, setShowContactSearch] = useState(false);
 
@@ -66,7 +73,7 @@ function CreateAppointmentContent() {
   // Fetch engineers list and existing appointments
   useEffect(() => {
     if (!isAuthenticated) return;
-    
+
     const fetchData = async () => {
       try {
         // Fetch engineers
@@ -98,35 +105,46 @@ function CreateAppointmentContent() {
           });
         });
         setExistingAppointments(appointmentsList);
+
+        // Fetch saved appointment types
+        const typesRef = collection(db, 'USERS', USER_ID, 'appointmentTypes');
+        const typesQuery = query(typesRef, orderBy('name'));
+        const typesSnap = await getDocs(typesQuery);
+        const typesList: Array<{ id: string; name: string }> = [];
+        typesSnap.forEach(docSnap => {
+          typesList.push({ id: docSnap.id, name: docSnap.data().name });
+        });
+        setSavedTypes(typesList);
+
       } catch (err) {
         console.error('Error fetching data:', err);
       }
     };
-    
+
     fetchData();
   }, [isAuthenticated]);
 
   // Calculate merged appointment count (same logic as in appointments page)
   const calculateMergedAppointmentCount = () => {
     if (selectedTimeSlots.length === 0) return 0;
-    
+
     const sortedSlots = [...selectedTimeSlots].sort((a, b) => {
       const dateCompare = a.date.localeCompare(b.date);
       if (dateCompare !== 0) return dateCompare;
       return a.startTime.localeCompare(b.startTime);
     });
-    
+
     let count = 0;
     let i = 0;
-    
+
     while (i < sortedSlots.length) {
       count++;
       const currentSlot = sortedSlots[i];
       let endTime = currentSlot.endTime;
-      
+
       while (i + 1 < sortedSlots.length) {
         const nextSlot = sortedSlots[i + 1];
-        
+
         if (nextSlot.date === currentSlot.date && nextSlot.startTime === endTime) {
           endTime = nextSlot.endTime;
           i++;
@@ -134,10 +152,10 @@ function CreateAppointmentContent() {
           break;
         }
       }
-      
+
       i++;
     }
-    
+
     return count;
   };
 
@@ -146,19 +164,19 @@ function CreateAppointmentContent() {
   // Check if an engineer is busy during the selected time slots
   const isEngineerBusy = (engineerId: string): boolean => {
     if (!engineerId) return false;
-    
+
     // For each selected time slot, check if this engineer has an appointment
     return selectedTimeSlots.some(slot => {
       const slotStart = new Date(`${slot.date}T${slot.startTime}:00`).getTime();
       const slotEnd = new Date(`${slot.date}T${slot.endTime}:00`).getTime();
-      
+
       // Check if engineer has any appointment overlapping with this slot
       return existingAppointments.some(apt => {
         if (apt.engineerId !== engineerId) return false;
-        
+
         const aptStart = new Date(apt.start).getTime();
         const aptEnd = new Date(apt.end).getTime();
-        
+
         // Check for overlap
         return aptStart < slotEnd && aptEnd > slotStart;
       });
@@ -176,51 +194,95 @@ function CreateAppointmentContent() {
     }
   }, [loading, isAuthenticated, selectedTimeSlots.length, router]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowTypeDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const saveAppointmentType = async (typeName: string) => {
+    const trimmedName = typeName.trim();
+    if (!trimmedName) return;
+
+    // Check if already exists (case insensitive)
+    const exists = savedTypes.some(t => t.name.toLowerCase() === trimmedName.toLowerCase());
+    if (!exists) {
+      try {
+        const docRef = await addDoc(collection(db, 'USERS', USER_ID, 'appointmentTypes'), {
+          name: trimmedName
+        });
+        setSavedTypes(prev => [...prev, { id: docRef.id, name: trimmedName }].sort((a, b) => a.name.localeCompare(b.name)));
+      } catch (err) {
+        console.error('Error saving appointment type:', err);
+      }
+    }
+  };
+
+  const deleteAppointmentType = async (e: React.MouseEvent, typeId: string) => {
+    e.stopPropagation(); // Prevent selecting the item
+    if (window.confirm('Are you sure you want to delete this appointment type?')) {
+      try {
+        await deleteDoc(doc(db, 'USERS', USER_ID, 'appointmentTypes', typeId));
+        setSavedTypes(prev => prev.filter(t => t.id !== typeId));
+      } catch (err) {
+        console.error('Error deleting appointment type:', err);
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!name || !email || !phone || !postcode) {
       setError('Please complete all required fields.');
       return;
     }
-    
+
     setIsSubmitting(true);
     setError('');
     setSuccessCount(0);
-    
+
     try {
       let successfulBookings = 0;
       const failedSlots: string[] = [];
-      
+
       // Group consecutive time slots into continuous appointments
       const mergedAppointments: Array<{
         date: string;
         startTime: string;
         endTime: string;
       }> = [];
-      
+
       // Sort slots by date and time
       const sortedSlots = [...selectedTimeSlots].sort((a, b) => {
         const dateCompare = a.date.localeCompare(b.date);
         if (dateCompare !== 0) return dateCompare;
         return a.startTime.localeCompare(b.startTime);
       });
-      
+
       // Merge consecutive slots
       for (let i = 0; i < sortedSlots.length; i++) {
         const currentSlot = sortedSlots[i];
-        
+
         // Start a new merged appointment
         let mergedSlot = {
           date: currentSlot.date,
           startTime: currentSlot.startTime,
           endTime: currentSlot.endTime,
         };
-        
+
         // Check if next slots are consecutive
         while (i + 1 < sortedSlots.length) {
           const nextSlot = sortedSlots[i + 1];
-          
+
           // Check if same date and consecutive times
           if (nextSlot.date === mergedSlot.date && nextSlot.startTime === mergedSlot.endTime) {
             // Merge by extending end time
@@ -230,20 +292,20 @@ function CreateAppointmentContent() {
             break; // Not consecutive, stop merging
           }
         }
-        
+
         mergedAppointments.push(mergedSlot);
       }
-      
+
       // Create appointments from merged slots
       for (const slot of mergedAppointments) {
         try {
           // Parse times and create ISO datetime strings
           const [startHour, startMin] = slot.startTime.split(':').map(Number);
           const [endHour, endMin] = slot.endTime.split(':').map(Number);
-          
+
           const startDateTime = `${slot.date}T${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}:00`;
           const endDateTime = `${slot.date}T${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:00`;
-          
+
           await addDoc(collection(db, 'USERS', USER_ID, 'appointments'), {
             date: slot.date,
             start: startDateTime,
@@ -262,34 +324,39 @@ function CreateAppointmentContent() {
             appointmentType: appointmentType || undefined,
             createdAt: new Date().toISOString(),
           });
-          
+
           successfulBookings++;
         } catch (err) {
           console.error(`Failed to create appointment for ${slot.date} ${slot.startTime}:`, err);
           failedSlots.push(`${slot.date} ${slot.startTime}`);
         }
       }
-      
+
+      // Save appointment type if new
+      if (appointmentType) {
+        await saveAppointmentType(appointmentType);
+      }
+
       setSuccessCount(successfulBookings);
       setCreatedAppointments(mergedAppointments);
-      
+
       if (failedSlots.length > 0) {
         setError(`Successfully created ${successfulBookings} appointment(s). Failed for: ${failedSlots.join(', ')}`);
       } else {
         setShowSuccess(true);
       }
-      
+
     } catch (err: any) {
       setError(err?.message || 'Failed to create appointments');
     } finally {
       setIsSubmitting(false);
     }
   };
-  
+
   const handleGoToAppointments = () => {
     router.push('/admin/appointments');
   };
-  
+
   const handleSelectContact = (contact: any) => {
     // Autofill form with contact details
     setName(contact.name || '');
@@ -331,9 +398,9 @@ function CreateAppointmentContent() {
               {createdAppointments.map((slot, idx) => (
                 <div key={idx} className="bg-gray-50 rounded-lg p-3 text-center">
                   <span className="font-medium text-gray-900">
-                    {new Date(slot.date + 'T00:00:00').toLocaleDateString('en-US', { 
+                    {new Date(slot.date + 'T00:00:00').toLocaleDateString('en-US', {
                       weekday: 'short',
-                      month: 'short', 
+                      month: 'short',
                       day: 'numeric',
                       year: 'numeric'
                     })}
@@ -384,9 +451,9 @@ function CreateAppointmentContent() {
               {selectedTimeSlots.map((slot, idx) => (
                 <div key={idx} className="bg-white rounded-lg p-2 text-sm">
                   <div className="font-medium text-gray-900">
-                    {new Date(slot.date + 'T00:00:00').toLocaleDateString('en-US', { 
+                    {new Date(slot.date + 'T00:00:00').toLocaleDateString('en-US', {
                       weekday: 'short',
-                      month: 'short', 
+                      month: 'short',
                       day: 'numeric'
                     })}
                   </div>
@@ -498,7 +565,7 @@ function CreateAppointmentContent() {
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-teal-500 bg-white"
               >
                 <option value="">Unassigned</option>
-                
+
                 {/* Available Engineers */}
                 {availableEngineers.length > 0 && (
                   <optgroup label="Available">
@@ -509,7 +576,7 @@ function CreateAppointmentContent() {
                     ))}
                   </optgroup>
                 )}
-                
+
                 {/* Busy Engineers - Disabled */}
                 {busyEngineers.length > 0 && (
                   <optgroup label="Busy (Not Available)">
@@ -521,13 +588,13 @@ function CreateAppointmentContent() {
                   </optgroup>
                 )}
               </select>
-              
+
               {busyEngineers.length > 0 && (
                 <p className="mt-2 text-sm text-amber-600">
                   ⚠️ {busyEngineers.length} engineer{busyEngineers.length !== 1 ? 's are' : ' is'} busy during the selected time slots
                 </p>
               )}
-              
+
               {availableEngineers.length === 0 && engineers.length > 0 && (
                 <p className="mt-2 text-sm text-red-600 font-medium">
                   ⚠️ All engineers are busy during the selected time slots. You can still create an unassigned appointment.
@@ -539,14 +606,56 @@ function CreateAppointmentContent() {
               <label htmlFor="appointmentType" className="block text-sm font-medium text-gray-700 mb-1">
                 Appointment Type (Optional)
               </label>
-              <input
-                type="text"
-                id="appointmentType"
-                value={appointmentType}
-                onChange={(e) => setAppointmentType(e.target.value)}
-                placeholder="e.g., Installation, Repair, Consultation"
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-teal-500 bg-white"
-              />
+              <div className="relative" ref={dropdownRef}>
+                <input
+                  type="text"
+                  id="appointmentType"
+                  value={appointmentType}
+                  onChange={(e) => {
+                    setAppointmentType(e.target.value);
+                    setShowTypeDropdown(true);
+                  }}
+                  onFocus={() => setShowTypeDropdown(true)}
+                  placeholder="e.g., Installation, Repair, Consultation"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-teal-500 bg-white"
+                  autoComplete="off"
+                />
+
+                {/* Type Dropdown */}
+                {showTypeDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-auto">
+                    {savedTypes
+                      .filter(t => t.name.toLowerCase().includes(appointmentType.toLowerCase()))
+                      .map(type => (
+                        <div
+                          key={type.id}
+                          className="flex items-center justify-between px-4 py-2 hover:bg-teal-50 cursor-pointer group"
+                          onClick={() => {
+                            setAppointmentType(type.name);
+                            setShowTypeDropdown(false);
+                          }}
+                        >
+                          <span className="text-gray-700">{type.name}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => deleteAppointmentType(e, type.id)}
+                            className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                            title="Remove type"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    {savedTypes.filter(t => t.name.toLowerCase().includes(appointmentType.toLowerCase())).length === 0 && appointmentType && (
+                      <div className="px-4 py-2 text-sm text-gray-500 italic">
+                        Press Create to save "{appointmentType}"
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {error && (
