@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import AppointmentBlock from './AppointmentBlock';
-import { assignColumnsByDate } from '../../lib/calendarUtils';
+import { assignColumnsByDate, getCommonPostcodeArea, fetchPostcodeAreaName } from '../../lib/calendarUtils';
 
 type AppointmentStatus = 'pending' | 'offered' | 'confirmed' | 'declined' | 'cancelled' | 'complete';
 
@@ -33,6 +33,7 @@ interface WeekCalendarProps {
   selectedTimeSlots?: Array<{ date: string; startTime: string; endTime: string }>;
   onToggleTimeSlot?: (date: string, startTime: string, endTime: string) => void;
   totalEngineers?: number;
+  selectedEngineerId?: string;
 }
 
 export default function WeekCalendar({
@@ -46,10 +47,13 @@ export default function WeekCalendar({
   selectedTimeSlots = [],
   onToggleTimeSlot,
   totalEngineers = 0,
+  selectedEngineerId,
 }: WeekCalendarProps) {
   // Drag selection state
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartSlot, setDragStartSlot] = useState<{ date: string; time: string } | null>(null);
+  const [areaNames, setAreaNames] = useState<Record<string, string>>({});
+
   // Get the week days - currentDate is the first day shown (leftmost)
   const weekDays = useMemo(() => {
     const days = [];
@@ -82,14 +86,64 @@ export default function WeekCalendar({
     return assignColumnsByDate(appointments);
   }, [appointments]);
 
+  // Fetch area names for the visible week
+  useEffect(() => {
+    if (!selectedEngineerId || selectedEngineerId === 'all') {
+      setAreaNames({});
+      return;
+    }
+
+    const fetchAreas = async () => {
+      const newAreaNames: Record<string, string> = {};
+      const promises: Promise<void>[] = [];
+
+      // Identify unique outward codes to fetch
+      const codesToFetch = new Set<string>();
+
+      weekDays.forEach(date => {
+        const dateKey = date.toISOString().split('T')[0];
+        const dayAppointments = appointmentsByDate[dateKey] || [];
+        const postcodes = dayAppointments.map(a => a.address?.postcode).filter(Boolean);
+        const areaCode = getCommonPostcodeArea(postcodes);
+
+        if (areaCode) {
+          // Store the code initially
+          newAreaNames[dateKey] = areaCode;
+          codesToFetch.add(areaCode);
+        }
+      });
+
+      // Fetch names for codes
+      for (const code of codesToFetch) {
+        promises.push(
+          fetchPostcodeAreaName(code).then(name => {
+            if (name) {
+              // Update all dates that use this code
+              Object.keys(newAreaNames).forEach(dateKey => {
+                if (newAreaNames[dateKey] === code) {
+                  newAreaNames[dateKey] = name;
+                }
+              });
+            }
+          })
+        );
+      }
+
+      await Promise.all(promises);
+      setAreaNames(newAreaNames);
+    };
+
+    fetchAreas();
+  }, [weekDays, appointmentsByDate, selectedEngineerId]);
+
   // Calculate which appointments should be rendered in each time slot
   const getAppointmentsForSlot = (dateKey: string, slotHour: number) => {
     const dayAppointments = appointmentsByDate[dateKey] || [];
-    
+
     return dayAppointments.filter(apt => {
       const startTime = new Date(apt.start);
       const startHour = startTime.getHours();
-      
+
       // Only render appointment in its starting hour slot
       return startHour === slotHour;
     });
@@ -99,20 +153,20 @@ export default function WeekCalendar({
   const isSlotFullyBooked = (dateKey: string, slotStartTime: string, slotEndTime: string) => {
     // If no engineers configured, slot is always available
     if (totalEngineers === 0) return false;
-    
+
     const dayAppointments = appointmentsByDate[dateKey] || [];
-    
+
     // Parse slot times
     const slotStart = new Date(`${dateKey}T${slotStartTime}:00`).getTime();
     const slotEnd = new Date(`${dateKey}T${slotEndTime}:00`).getTime();
-    
+
     // Count unique engineers who are busy during this slot
     const busyEngineers = new Set<string>();
-    
+
     dayAppointments.forEach(apt => {
       const aptStart = new Date(apt.start).getTime();
       const aptEnd = new Date(apt.end).getTime();
-      
+
       // Check for overlap: appointment starts before slot ends AND appointment ends after slot starts
       if (aptStart < slotEnd && aptEnd > slotStart) {
         // This appointment overlaps with the slot
@@ -121,7 +175,7 @@ export default function WeekCalendar({
         }
       }
     });
-    
+
     // Slot is fully booked only if all engineers are busy
     return busyEngineers.size >= totalEngineers;
   };
@@ -132,7 +186,7 @@ export default function WeekCalendar({
     const end = new Date(appointment.end);
     const durationMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
     const durationHours = durationMinutes / 60;
-    
+
     // Each hour slot is 80px (min-h-[80px])
     const heightPerHour = 80;
     return durationHours * heightPerHour;
@@ -168,14 +222,14 @@ export default function WeekCalendar({
   // Handle drag selection
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, dateKey: string, startTimeStr: string, endTimeStr: string, slotIsFullyBooked: boolean) => {
     if (!selectionMode || !onToggleTimeSlot || slotIsFullyBooked) return;
-    
+
     // Prevent all default behaviors
     e.preventDefault();
     e.stopPropagation();
-    
+
     setIsDragging(true);
     setDragStartSlot({ date: dateKey, time: startTimeStr });
-    
+
     // Toggle the starting slot
     onToggleTimeSlot(dateKey, startTimeStr, endTimeStr);
   };
@@ -185,7 +239,7 @@ export default function WeekCalendar({
     e.preventDefault();
     e.stopPropagation();
   };
-  
+
   const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
     // Prevent context menu which can cause scroll
     e.preventDefault();
@@ -194,12 +248,12 @@ export default function WeekCalendar({
   const handleMouseEnter = (dateKey: string, startTimeStr: string, endTimeStr: string, slotIsFullyBooked: boolean) => {
     if (!isDragging || !selectionMode || !onToggleTimeSlot || slotIsFullyBooked) return;
     if (!dragStartSlot) return;
-    
+
     // Check if slot is already selected
     const isAlreadySelected = selectedTimeSlots.some(
       slot => slot.date === dateKey && slot.startTime === startTimeStr
     );
-    
+
     // Only select if not already selected (prevent deselecting during drag)
     if (!isAlreadySelected) {
       onToggleTimeSlot(dateKey, startTimeStr, endTimeStr);
@@ -262,28 +316,49 @@ export default function WeekCalendar({
             <div className="p-4"></div>
             {weekDays.map((date, index) => {
               const today = isToday(date);
-              
+
               return (
                 <div
                   key={index}
-                  className={`relative p-4 text-center border-l border-gray-200 ${
-                    today ? 'bg-gray-800' : ''
-                  }`}
+                  className={`relative p-4 text-center border-l border-gray-200 ${today ? 'bg-gray-800' : ''
+                    }`}
                 >
-                  <div className={`text-xs font-semibold uppercase mb-1 ${
-                    today ? 'text-white' : 'text-gray-600'
-                  }`}>
+                  <div className={`text-xs font-semibold uppercase mb-1 ${today ? 'text-white' : 'text-gray-600'
+                    }`}>
                     {date.toLocaleDateString('en-US', { weekday: 'short' })}
                   </div>
-                  <div className={`text-sm ${
-                    today ? 'text-white font-bold' : 'text-gray-500'
-                  }`}>
+                  <div className={`text-sm ${today ? 'text-white font-bold' : 'text-gray-500'
+                    }`}>
                     {date.getDate()}
                   </div>
                 </div>
               );
             })}
           </div>
+
+          {/* Engineer Area Row */}
+          {selectedEngineerId && selectedEngineerId !== 'all' && (
+            <div className="grid grid-cols-8 border-b border-gray-200 bg-indigo-50">
+              <div className="p-2 border-r border-gray-200 text-xs font-bold text-indigo-800 flex items-center justify-end pr-4 uppercase tracking-wider">
+                Area
+              </div>
+              {weekDays.map((date, index) => {
+                const dateKey = date.toISOString().split('T')[0];
+                const areaName = areaNames[dateKey];
+                const dayAppointments = appointmentsByDate[dateKey] || [];
+                const postcodes = dayAppointments.map(a => a.address?.postcode).filter(Boolean);
+                const areaCode = getCommonPostcodeArea(postcodes);
+
+                const displayText = areaName ? `${areaName} (${areaCode})` : (areaCode || '-');
+
+                return (
+                  <div key={index} className="p-2 text-center border-l border-gray-200 text-sm font-bold text-indigo-700 whitespace-normal break-words leading-tight px-1" title={displayText}>
+                    {displayText}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Time Grid */}
           <div className="relative">
@@ -296,17 +371,17 @@ export default function WeekCalendar({
                   const dateKey = date.toISOString().split('T')[0];
                   const slotHour = parseInt(time.split(':')[0]);
                   const slotAppointments = getAppointmentsForSlot(dateKey, slotHour);
-                  
+
                   // Calculate end time (next hour)
                   const endHour = slotHour + 1;
                   const startTimeStr = `${String(slotHour).padStart(2, '0')}:00`;
                   const endTimeStr = `${String(endHour).padStart(2, '0')}:00`;
-                  
+
                   // Check if this slot is selected
                   const isSlotSelected = selectedTimeSlots.some(
                     slot => slot.date === dateKey && slot.startTime === startTimeStr
                   );
-                  
+
                   // Check if this slot is fully booked (all engineers busy)
                   const slotIsFullyBooked = isSlotFullyBooked(dateKey, startTimeStr, endTimeStr);
 
@@ -322,17 +397,12 @@ export default function WeekCalendar({
                       onFocus={(e) => e.preventDefault()}
                       tabIndex={-1}
                       style={isSlotSelected ? { boxShadow: 'inset 0 0 0 2px rgb(20 184 166)' } : undefined}
-                      className={`relative p-2 border-l border-gray-200 min-h-[80px] select-none ${
-                        isDragging ? 'cursor-grabbing' : selectionMode && !slotIsFullyBooked ? 'cursor-pointer' : ''
-                      } ${
-                        isToday(date) ? 'bg-gray-50' : ''
-                      } ${
-                        selectionMode && !slotIsFullyBooked && !isDragging ? 'hover:bg-teal-50' : ''
-                      } ${
-                        selectionMode && slotIsFullyBooked ? 'cursor-not-allowed bg-gray-100' : ''
-                      } ${
-                        isSlotSelected ? 'bg-teal-100' : ''
-                      }`}
+                      className={`relative p-2 border-l border-gray-200 min-h-[80px] select-none ${isDragging ? 'cursor-grabbing' : selectionMode && !slotIsFullyBooked ? 'cursor-pointer' : ''
+                        } ${isToday(date) ? 'bg-gray-50' : ''
+                        } ${selectionMode && !slotIsFullyBooked && !isDragging ? 'hover:bg-teal-50' : ''
+                        } ${selectionMode && slotIsFullyBooked ? 'cursor-not-allowed bg-gray-100' : ''
+                        } ${isSlotSelected ? 'bg-teal-100' : ''
+                        }`}
                     >
                       {selectionMode && slotIsFullyBooked && (
                         <div className="absolute top-1 right-1 z-30">
@@ -352,20 +422,20 @@ export default function WeekCalendar({
                         const height = calculateAppointmentHeight(apt);
                         const startTime = new Date(apt.start);
                         const startMinutes = startTime.getMinutes();
-                        
+
                         // Calculate top offset based on minutes past the hour
                         const topOffset = (startMinutes / 60) * 80; // 80px per hour
-                        
+
                         // Get column assignment for this appointment
                         const dateColumns = columnAssignments.get(dateKey);
                         const columnInfo = dateColumns?.get(apt.id);
                         const column = columnInfo?.column ?? 0;
                         const columnCount = columnInfo?.columnCount ?? 1;
-                        
+
                         // Calculate horizontal position based on column assignment
                         const widthPercent = 100 / columnCount;
                         const leftPercent = column * widthPercent;
-                        
+
                         return (
                           <div
                             key={apt.id}

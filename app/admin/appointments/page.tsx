@@ -44,11 +44,15 @@ export default function AppointmentsPage() {
   const [error, setError] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('week');
-  
+
   // Time slot selection state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedTimeSlots, setSelectedTimeSlots] = useState<Array<{ date: string; startTime: string; endTime: string }>>([]);
-  
+
+  // ADDED STATE
+  const [selectedEngineerId, setSelectedEngineerId] = useState<string>('all');
+  const [engineers, setEngineers] = useState<Array<{ id: string, name: string }>>([]);
+
   const [currentDate, setCurrentDate] = useState(() => {
     // Initialize to Monday of current week for week view
     const today = new Date();
@@ -80,16 +84,15 @@ export default function AppointmentsPage() {
     const fetchAppointments = async () => {
       setLoading(true);
       setError('');
-      
+
       try {
         // Fetch appointments from user's subcollection
         const appointmentsRef = collection(db, 'USERS', USER_ID, 'appointments');
         const q = query(appointmentsRef, orderBy('date', 'asc'));
         const querySnapshot = await getDocs(q);
-        
+
         const fetchedAppointments: Appointment[] = [];
-        const engineerIds = new Set<string>();
-        
+
         querySnapshot.forEach((docSnapshot) => {
           const data = docSnapshot.data();
           fetchedAppointments.push({
@@ -110,28 +113,25 @@ export default function AppointmentsPage() {
               location: data.address?.location,
             },
           });
-          
-          if (data.engineerId) {
-            engineerIds.add(data.engineerId);
-          }
         });
-        
+
         setAppointments(fetchedAppointments);
-        
-        // Fetch engineer names from user's subcollection
+
+        // CHANGED: Fetch all engineers
+        const engineersRef = collection(db, 'USERS', USER_ID, 'engineers');
+        const engineersSnapshot = await getDocs(engineersRef);
+
+        const engineersList: Array<{ id: string, name: string }> = [];
         const engineerNamesMap: Record<string, string> = {};
-        for (const engineerId of engineerIds) {
-          try {
-            const engineerDoc = await getDoc(doc(db, 'USERS', USER_ID, 'engineers', engineerId));
-            if (engineerDoc.exists()) {
-              const engineerData = engineerDoc.data();
-              engineerNamesMap[engineerId] = engineerData.name || engineerId;
-            }
-          } catch (err) {
-            console.error(`Error fetching engineer ${engineerId}:`, err);
-          }
-        }
-        
+
+        engineersSnapshot.forEach((doc) => {
+          const data = doc.data();
+          const name = data.name || 'Unknown Engineer';
+          engineersList.push({ id: doc.id, name });
+          engineerNamesMap[doc.id] = name;
+        });
+
+        setEngineers(engineersList);
         setEngineerNames(engineerNamesMap);
       } catch (err) {
         console.error('Error fetching appointments:', err);
@@ -207,10 +207,10 @@ export default function AppointmentsPage() {
 
   const handleToggleTimeSlot = (date: string, startTime: string, endTime: string) => {
     const slotKey = `${date}-${startTime}`;
-    
+
     setSelectedTimeSlots(prev => {
       const exists = prev.find(slot => `${slot.date}-${slot.startTime}` === slotKey);
-      
+
       if (exists) {
         return prev.filter(slot => `${slot.date}-${slot.startTime}` !== slotKey);
       } else {
@@ -225,7 +225,7 @@ export default function AppointmentsPage() {
 
   const handleBookTimeSlots = () => {
     if (selectedTimeSlots.length === 0) return;
-    
+
     // Navigate to appointment creation page with selected time slots
     const slotsParam = selectedTimeSlots.map(slot => `${slot.date}|${slot.startTime}|${slot.endTime}`).join(',');
     router.push(`/admin/appointments/create?slots=${encodeURIComponent(slotsParam)}`);
@@ -234,26 +234,26 @@ export default function AppointmentsPage() {
   // Calculate the actual number of appointments that will be created (after merging)
   const calculateMergedAppointmentCount = () => {
     if (selectedTimeSlots.length === 0) return 0;
-    
+
     // Sort slots by date and time
     const sortedSlots = [...selectedTimeSlots].sort((a, b) => {
       const dateCompare = a.date.localeCompare(b.date);
       if (dateCompare !== 0) return dateCompare;
       return a.startTime.localeCompare(b.startTime);
     });
-    
+
     let count = 0;
     let i = 0;
-    
+
     while (i < sortedSlots.length) {
       count++; // Start a new appointment
       const currentSlot = sortedSlots[i];
       let endTime = currentSlot.endTime;
-      
+
       // Check for consecutive slots
       while (i + 1 < sortedSlots.length) {
         const nextSlot = sortedSlots[i + 1];
-        
+
         if (nextSlot.date === currentSlot.date && nextSlot.startTime === endTime) {
           endTime = nextSlot.endTime;
           i++;
@@ -261,12 +261,17 @@ export default function AppointmentsPage() {
           break;
         }
       }
-      
+
       i++;
     }
-    
+
     return count;
   };
+
+  // ADDED FILTER LOGIC
+  const filteredAppointments = selectedEngineerId === 'all'
+    ? appointments
+    : appointments.filter(app => app.engineerId === selectedEngineerId);
 
   if (!isAuthenticated) {
     return null;
@@ -288,7 +293,7 @@ export default function AppointmentsPage() {
       <div className="max-w-7xl mx-auto px-4">
         {/* Header */}
         <div className="mb-8">
-          <Link 
+          <Link
             href="/admin"
             className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold mb-4"
           >
@@ -297,7 +302,7 @@ export default function AppointmentsPage() {
             </svg>
             Back to Dashboard
           </Link>
-          
+
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-4xl font-bold text-gray-900 mb-2">Appointments</h1>
@@ -306,17 +311,38 @@ export default function AppointmentsPage() {
               </p>
             </div>
             <div className="flex items-center gap-4">
-              <CalendarViewSelector 
+              <CalendarViewSelector
                 currentView={viewMode}
                 onViewChange={handleViewChange}
               />
+
+              {/* ADDED DROPDOWN */}
+              <div className="relative">
+                <select
+                  value={selectedEngineerId}
+                  onChange={(e) => setSelectedEngineerId(e.target.value)}
+                  className="appearance-none bg-white border border-gray-300 text-gray-700 py-2 pl-4 pr-8 rounded-lg leading-tight focus:outline-none focus:bg-white focus:border-indigo-500 font-medium"
+                >
+                  <option value="all">All Engineers</option>
+                  {engineers.map((engineer) => (
+                    <option key={engineer.id} value={engineer.id}>
+                      {engineer.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                  <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                  </svg>
+                </div>
+              </div>
+
               <button
                 onClick={toggleSelectionMode}
-                className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                  selectionMode
-                    ? 'bg-teal-600 text-white hover:bg-teal-700'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                className={`px-4 py-2 rounded-lg font-semibold transition-colors ${selectionMode
+                  ? 'bg-teal-600 text-white hover:bg-teal-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
               >
                 {selectionMode ? 'Cancel Selection' : 'Select Time Slots'}
               </button>
@@ -341,7 +367,7 @@ export default function AppointmentsPage() {
                       )}
                     </p>
                     <p className="text-sm text-gray-600">
-                      {selectedTimeSlots.slice(0, 3).map(slot => 
+                      {selectedTimeSlots.slice(0, 3).map(slot =>
                         `${new Date(slot.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${slot.startTime}`
                       ).join(', ')}
                       {selectedTimeSlots.length > 3 && ` +${selectedTimeSlots.length - 3} more`}
@@ -370,7 +396,7 @@ export default function AppointmentsPage() {
         {viewMode === 'week' && (
           <WeekCalendar
             currentDate={currentDate}
-            appointments={appointments}
+            appointments={filteredAppointments}
             engineerNames={engineerNames}
             onPrevious={handlePrevious}
             onNext={handleNext}
@@ -379,13 +405,14 @@ export default function AppointmentsPage() {
             selectedTimeSlots={selectedTimeSlots}
             onToggleTimeSlot={handleToggleTimeSlot}
             totalEngineers={Object.keys(engineerNames).length}
+            selectedEngineerId={selectedEngineerId}
           />
         )}
 
         {viewMode === 'month' && (
           <MonthCalendar
             currentDate={currentDate}
-            appointments={appointments}
+            appointments={filteredAppointments}
             engineerNames={engineerNames}
             onPrevious={handlePrevious}
             onNext={handleNext}
@@ -393,13 +420,14 @@ export default function AppointmentsPage() {
             selectionMode={selectionMode}
             selectedTimeSlots={selectedTimeSlots}
             onToggleTimeSlot={handleToggleTimeSlot}
+            selectedEngineerId={selectedEngineerId}
           />
         )}
 
         {viewMode === 'day' && (
           <DayCalendar
             currentDate={currentDate}
-            appointments={appointments}
+            appointments={filteredAppointments}
             engineerNames={engineerNames}
             onPrevious={handlePrevious}
             onNext={handleNext}
@@ -408,6 +436,7 @@ export default function AppointmentsPage() {
             selectedTimeSlots={selectedTimeSlots}
             onToggleTimeSlot={handleToggleTimeSlot}
             totalEngineers={Object.keys(engineerNames).length}
+            selectedEngineerId={selectedEngineerId}
           />
         )}
       </div>

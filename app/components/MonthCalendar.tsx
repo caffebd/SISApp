@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import AppointmentBlock from './AppointmentBlock';
+import { getCommonPostcodeArea, fetchPostcodeAreaName } from '../../lib/calendarUtils';
 
 type AppointmentStatus = 'pending' | 'offered' | 'confirmed' | 'declined' | 'cancelled' | 'complete';
 
@@ -31,6 +32,7 @@ interface MonthCalendarProps {
   selectionMode?: boolean;
   selectedTimeSlots?: Array<{ date: string; startTime: string; endTime: string }>;
   onToggleTimeSlot?: (date: string, startTime: string, endTime: string) => void;
+  selectedEngineerId?: string;
 }
 
 export default function MonthCalendar({
@@ -43,21 +45,23 @@ export default function MonthCalendar({
   selectionMode = false,
   selectedTimeSlots = [],
   onToggleTimeSlot,
+  selectedEngineerId,
 }: MonthCalendarProps) {
+  const [areaNames, setAreaNames] = useState<Record<string, string>>({});
   // Get calendar grid (6 weeks)
   const calendarDays = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    
+
     // First day of the month
     const firstDay = new Date(year, month, 1);
     const firstDayOfWeek = firstDay.getDay();
-    
+
     // Start from Monday of the week containing the first day
     const startDate = new Date(firstDay);
     const diff = firstDayOfWeek === 0 ? -6 : 1 - firstDayOfWeek;
     startDate.setDate(firstDay.getDate() + diff);
-    
+
     // Generate 42 days (6 weeks)
     const days = [];
     for (let i = 0; i < 42; i++) {
@@ -65,7 +69,7 @@ export default function MonthCalendar({
       date.setDate(startDate.getDate() + i);
       days.push(date);
     }
-    
+
     return days;
   }, [currentDate]);
 
@@ -84,7 +88,53 @@ export default function MonthCalendar({
       grouped[key].sort((a, b) => a.start.localeCompare(b.start));
     });
     return grouped;
+    return grouped;
   }, [appointments]);
+
+  // Fetch area names for the month
+  useEffect(() => {
+    if (!selectedEngineerId || selectedEngineerId === 'all') {
+      setAreaNames({});
+      return;
+    }
+
+    const fetchAreas = async () => {
+      const newAreaNames: Record<string, string> = {};
+      const promises: Promise<void>[] = [];
+      const codesToFetch = new Set<string>();
+
+      calendarDays.forEach(date => {
+        const dateKey = date.toISOString().split('T')[0];
+        const dayAppointments = appointmentsByDate[dateKey] || [];
+        const postcodes = dayAppointments.map(a => a.address?.postcode).filter(Boolean);
+        const areaCode = getCommonPostcodeArea(postcodes);
+
+        if (areaCode) {
+          newAreaNames[dateKey] = areaCode;
+          codesToFetch.add(areaCode);
+        }
+      });
+
+      for (const code of codesToFetch) {
+        promises.push(
+          fetchPostcodeAreaName(code).then(name => {
+            if (name) {
+              Object.keys(newAreaNames).forEach(dateKey => {
+                if (newAreaNames[dateKey] === code) {
+                  newAreaNames[dateKey] = name;
+                }
+              });
+            }
+          })
+        );
+      }
+
+      await Promise.all(promises);
+      setAreaNames(newAreaNames);
+    };
+
+    fetchAreas();
+  }, [calendarDays, appointmentsByDate, selectedEngineerId]);
 
   const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
@@ -155,23 +205,36 @@ export default function MonthCalendar({
             return (
               <div
                 key={index}
-                className={`relative min-h-[120px] border rounded-lg p-2 ${
-                  today
-                    ? 'bg-blue-50 border-blue-300'
-                    : 'border-gray-200'
-                } ${!currentMonth ? 'bg-gray-50' : 'bg-white'} ${
-                  selectionMode ? 'opacity-60' : ''
-                }`}
+                className={`relative min-h-[120px] border rounded-lg p-2 ${today
+                  ? 'bg-blue-50 border-blue-300'
+                  : 'border-gray-200'
+                  } ${!currentMonth ? 'bg-gray-50' : 'bg-white'} ${selectionMode ? 'opacity-60' : ''
+                  }`}
               >
-                <div className={`text-sm font-semibold mb-2 ${
-                  today
-                    ? 'text-blue-700'
-                    : currentMonth
+                <div className={`text-sm font-semibold mb-2 ${today
+                  ? 'text-blue-700'
+                  : currentMonth
                     ? 'text-gray-900'
                     : 'text-gray-400'
-                }`}>
+                  }`}>
                   {date.getDate()}
                 </div>
+                {selectedEngineerId && selectedEngineerId !== 'all' && (
+                  (() => {
+                    const dayAppointments = appointmentsByDate[dateKey] || [];
+                    const postcodes = dayAppointments.map(a => a.address?.postcode).filter(Boolean);
+                    const areaCode = getCommonPostcodeArea(postcodes);
+                    const areaName = areaNames[dateKey];
+
+                    if (!areaCode) return null;
+
+                    return (
+                      <div className="text-xs font-bold text-indigo-700 mb-1 whitespace-normal break-words leading-tight" title={areaName ? `${areaName} (${areaCode})` : areaCode}>
+                        {areaName ? `${areaName} (${areaCode})` : areaCode}
+                      </div>
+                    );
+                  })()
+                )}
                 <div className="space-y-1">
                   {visibleAppointments.map(apt => (
                     <AppointmentBlock

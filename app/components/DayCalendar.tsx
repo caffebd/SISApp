@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import AppointmentBlock from './AppointmentBlock';
-import { assignAppointmentColumns } from '../../lib/calendarUtils';
+import { assignAppointmentColumns, getCommonPostcodeArea, fetchPostcodeAreaName } from '../../lib/calendarUtils';
 
 type AppointmentStatus = 'pending' | 'offered' | 'confirmed' | 'declined' | 'cancelled' | 'complete';
 
@@ -33,6 +33,7 @@ interface DayCalendarProps {
   selectedTimeSlots?: Array<{ date: string; startTime: string; endTime: string }>;
   onToggleTimeSlot?: (date: string, startTime: string, endTime: string) => void;
   totalEngineers?: number;
+  selectedEngineerId?: string;
 }
 
 export default function DayCalendar({
@@ -46,10 +47,14 @@ export default function DayCalendar({
   selectedTimeSlots = [],
   onToggleTimeSlot,
   totalEngineers = 0,
+  selectedEngineerId,
 }: DayCalendarProps) {
   // Drag selection state
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartTime, setDragStartTime] = useState<string | null>(null);
+  const [areaName, setAreaName] = useState<string | null>(null);
+  const [areaCode, setAreaCode] = useState<string | null>(null);
+
   // Filter appointments for current day
   const dayAppointments = useMemo(() => {
     const dateKey = currentDate.toISOString().split('T')[0];
@@ -57,6 +62,30 @@ export default function DayCalendar({
       .filter(apt => apt.date === dateKey)
       .sort((a, b) => a.start.localeCompare(b.start));
   }, [currentDate, appointments]);
+
+  // Fetch area name for the day
+  useEffect(() => {
+    if (!selectedEngineerId || selectedEngineerId === 'all') {
+      setAreaName(null);
+      setAreaCode(null);
+      return;
+    }
+
+    const fetchArea = async () => {
+      const postcodes = dayAppointments.map(a => a.address?.postcode).filter(Boolean);
+      const code = getCommonPostcodeArea(postcodes);
+      setAreaCode(code);
+
+      if (code) {
+        const name = await fetchPostcodeAreaName(code);
+        setAreaName(name);
+      } else {
+        setAreaName(null);
+      }
+    };
+
+    fetchArea();
+  }, [dayAppointments, selectedEngineerId]);
 
   // Assign columns to appointments for proper overlap handling
   const columnAssignments = useMemo(() => {
@@ -68,7 +97,7 @@ export default function DayCalendar({
     return dayAppointments.filter(apt => {
       const startTime = new Date(apt.start);
       const startHour = startTime.getHours();
-      
+
       // Only render appointment in its starting hour slot
       return startHour === slotHour;
     });
@@ -78,20 +107,20 @@ export default function DayCalendar({
   const isSlotFullyBooked = (slotStartTime: string, slotEndTime: string) => {
     // If no engineers configured, slot is always available
     if (totalEngineers === 0) return false;
-    
+
     const dateKey = currentDate.toISOString().split('T')[0];
-    
+
     // Parse slot times
     const slotStart = new Date(`${dateKey}T${slotStartTime}:00`).getTime();
     const slotEnd = new Date(`${dateKey}T${slotEndTime}:00`).getTime();
-    
+
     // Count unique engineers who are busy during this slot
     const busyEngineers = new Set<string>();
-    
+
     dayAppointments.forEach(apt => {
       const aptStart = new Date(apt.start).getTime();
       const aptEnd = new Date(apt.end).getTime();
-      
+
       // Check for overlap: appointment starts before slot ends AND appointment ends after slot starts
       if (aptStart < slotEnd && aptEnd > slotStart) {
         // This appointment overlaps with the slot
@@ -100,7 +129,7 @@ export default function DayCalendar({
         }
       }
     });
-    
+
     // Slot is fully booked only if all engineers are busy
     return busyEngineers.size >= totalEngineers;
   };
@@ -111,7 +140,7 @@ export default function DayCalendar({
     const end = new Date(appointment.end);
     const durationMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
     const durationHours = durationMinutes / 60;
-    
+
     // Each hour slot is 100px (min-h-[100px])
     const heightPerHour = 100;
     return durationHours * heightPerHour;
@@ -134,7 +163,7 @@ export default function DayCalendar({
   const showCurrentTime = currentHour >= 8 && currentHour <= 15;
 
   const formatDate = () => {
-    return currentDate.toLocaleDateString('en-US', { 
+    return currentDate.toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'long',
       day: 'numeric',
@@ -152,21 +181,21 @@ export default function DayCalendar({
   // Handle drag selection
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, startTimeStr: string, endTimeStr: string, slotIsFullyBooked: boolean) => {
     if (!selectionMode || !onToggleTimeSlot || slotIsFullyBooked) return;
-    
+
     // Prevent all default behaviors
     e.preventDefault();
     e.stopPropagation();
-    
+
     // Get current scroll positions
     const scrollY = window.scrollY || window.pageYOffset;
     const scrollX = window.scrollX || window.pageXOffset;
-    
+
     setIsDragging(true);
     setDragStartTime(startTimeStr);
-    
+
     // Toggle the starting slot
     onToggleTimeSlot(dateKey, startTimeStr, endTimeStr);
-    
+
     // Force scroll position to stay the same
     requestAnimationFrame(() => {
       window.scrollTo(scrollX, scrollY);
@@ -178,7 +207,7 @@ export default function DayCalendar({
     e.preventDefault();
     e.stopPropagation();
   };
-  
+
   const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
     // Prevent context menu
     e.preventDefault();
@@ -186,12 +215,12 @@ export default function DayCalendar({
 
   const handleMouseEnter = (startTimeStr: string, endTimeStr: string, slotIsFullyBooked: boolean) => {
     if (!isDragging || !selectionMode || !onToggleTimeSlot || slotIsFullyBooked) return;
-    
+
     // Check if slot is already selected
     const isAlreadySelected = selectedTimeSlots.some(
       slot => slot.date === dateKey && slot.startTime === startTimeStr
     );
-    
+
     // Only select if not already selected (prevent deselecting during drag)
     if (!isAlreadySelected) {
       onToggleTimeSlot(dateKey, startTimeStr, endTimeStr);
@@ -243,7 +272,14 @@ export default function DayCalendar({
             </button>
           </div>
         </div>
-        <h2 className="text-lg font-bold text-gray-900">{formatDate()}</h2>
+        <div className="flex flex-col items-end">
+          <h2 className="text-lg font-bold text-gray-900">{formatDate()}</h2>
+          {selectedEngineerId && selectedEngineerId !== 'all' && (areaCode || areaName) && (
+            <div className="text-sm font-bold text-indigo-700 mt-1">
+              {areaName ? `${areaName} (${areaCode})` : areaCode}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Time Grid */}
@@ -252,17 +288,17 @@ export default function DayCalendar({
           {timeSlots.map((time) => {
             const slotHour = parseInt(time.split(':')[0]);
             const slotAppointments = getAppointmentsForSlot(slotHour);
-            
+
             // Calculate end time
             const endHour = slotHour + 1;
             const startTimeStr = `${String(slotHour).padStart(2, '0')}:00`;
             const endTimeStr = `${String(endHour).padStart(2, '0')}:00`;
-            
+
             // Check if this slot is selected
             const isSlotSelected = selectedTimeSlots.some(
               slot => slot.date === dateKey && slot.startTime === startTimeStr
             );
-            
+
             // Check if this slot is fully booked (all engineers busy)
             const slotIsFullyBooked = isSlotFullyBooked(startTimeStr, endTimeStr);
 
@@ -271,7 +307,7 @@ export default function DayCalendar({
                 <div className="w-20 p-3 text-right text-sm text-gray-500 font-medium flex-shrink-0">
                   {time}
                 </div>
-                <div 
+                <div
                   onMouseDown={(e) => handleMouseDown(e, startTimeStr, endTimeStr, slotIsFullyBooked)}
                   onMouseEnter={() => handleMouseEnter(startTimeStr, endTimeStr, slotIsFullyBooked)}
                   onMouseUp={handleMouseUp}
@@ -281,15 +317,11 @@ export default function DayCalendar({
                   onFocus={(e) => e.preventDefault()}
                   tabIndex={-1}
                   style={isSlotSelected ? { boxShadow: 'inset 0 0 0 2px rgb(20 184 166)' } : undefined}
-                  className={`relative flex-1 p-3 min-h-[100px] select-none ${
-                    isDragging ? 'cursor-grabbing' : selectionMode && !slotIsFullyBooked ? 'cursor-pointer' : ''
-                  } ${isToday() ? 'bg-gray-50' : ''} ${
-                    selectionMode && !slotIsFullyBooked && !isDragging ? 'hover:bg-teal-50' : ''
-                  } ${
-                    selectionMode && slotIsFullyBooked ? 'cursor-not-allowed bg-gray-100' : ''
-                  } ${
-                    isSlotSelected ? 'bg-teal-100' : ''
-                  }`}
+                  className={`relative flex-1 p-3 min-h-[100px] select-none ${isDragging ? 'cursor-grabbing' : selectionMode && !slotIsFullyBooked ? 'cursor-pointer' : ''
+                    } ${isToday() ? 'bg-gray-50' : ''} ${selectionMode && !slotIsFullyBooked && !isDragging ? 'hover:bg-teal-50' : ''
+                    } ${selectionMode && slotIsFullyBooked ? 'cursor-not-allowed bg-gray-100' : ''
+                    } ${isSlotSelected ? 'bg-teal-100' : ''
+                    }`}
                 >
                   {selectionMode && slotIsFullyBooked && (
                     <div className="absolute top-1 right-1 z-30">
@@ -309,19 +341,19 @@ export default function DayCalendar({
                     const height = calculateAppointmentHeight(apt);
                     const startTime = new Date(apt.start);
                     const startMinutes = startTime.getMinutes();
-                    
+
                     // Calculate top offset based on minutes past the hour
                     const topOffset = (startMinutes / 60) * 100; // 100px per hour
-                    
+
                     // Get column assignment for this appointment
                     const columnInfo = columnAssignments.get(apt.id);
                     const column = columnInfo?.column ?? 0;
                     const columnCount = columnInfo?.columnCount ?? 1;
-                    
+
                     // Calculate horizontal position based on column assignment
                     const widthPercent = 100 / columnCount;
                     const leftPercent = column * widthPercent;
-                    
+
                     return (
                       <div
                         key={apt.id}

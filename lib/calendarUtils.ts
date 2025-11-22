@@ -30,7 +30,7 @@ export function assignAppointmentColumns(
   appointments: Appointment[]
 ): Map<string, { column: number; columnCount: number }> {
   const result = new Map<string, { column: number; columnCount: number }>();
-  
+
   if (appointments.length === 0) {
     return result;
   }
@@ -39,7 +39,7 @@ export function assignAppointmentColumns(
   const sorted = [...appointments].sort((a, b) => {
     const startCompare = a.start.localeCompare(b.start);
     if (startCompare !== 0) return startCompare;
-    
+
     const durationA = new Date(a.end).getTime() - new Date(a.start).getTime();
     const durationB = new Date(b.end).getTime() - new Date(b.start).getTime();
     return durationB - durationA; // Longer appointments first
@@ -55,15 +55,15 @@ export function assignAppointmentColumns(
 
     // Find the first available column (where no appointment overlaps)
     let assignedColumn = -1;
-    
+
     for (let i = 0; i < columns.length; i++) {
       const column = columns[i];
-      
+
       // Check if this appointment overlaps with any appointment in this column
-      const hasOverlap = column.appointments.some(existingApt => 
+      const hasOverlap = column.appointments.some(existingApt =>
         appointmentsOverlap(apt, existingApt)
       );
-      
+
       if (!hasOverlap) {
         assignedColumn = i;
         break;
@@ -107,7 +107,7 @@ export function assignColumnsByDate(
 
   // Group appointments by date
   const appointmentsByDate = new Map<string, Appointment[]>();
-  
+
   for (const apt of appointments) {
     if (!appointmentsByDate.has(apt.date)) {
       appointmentsByDate.set(apt.date, []);
@@ -122,4 +122,81 @@ export function assignColumnsByDate(
   }
 
   return byDate;
+}
+
+/**
+ * Extracts components from a UK postcode
+ * Handles postcodes with or without spaces (e.g. "SW1A 1AA" or "SW1A1AA")
+ */
+export function getPostcodeComponents(postcode: string) {
+  const normalized = postcode.toUpperCase().trim().replace(/\s+/g, '');
+
+  // UK postcodes always have an Inward Code of 3 chars (e.g. 1AA)
+  // The rest is the Outward Code (e.g. SW1A)
+  if (normalized.length < 5) {
+    // Too short to be a full postcode, treat as just outward code
+    return { area: '', district: '', outward: normalized };
+  }
+
+  const outward = normalized.slice(0, -3);
+  // const inward = normalized.slice(-3); // Not needed for area logic
+
+  const areaMatch = outward.match(/^[A-Z]+/);
+  const area = areaMatch ? areaMatch[0] : '';
+
+  // District logic: remove trailing letter if present (e.g. W1A -> W1)
+  const district = outward.replace(/[A-Z]$/, '');
+
+  return { area, district, outward };
+}
+
+/**
+ * Finds the most specific common postcode area/district/sub-district for a list of postcodes
+ */
+export function getCommonPostcodeArea(postcodes: string[]): string {
+  if (!postcodes.length) return '';
+
+  const parsed = postcodes.map(getPostcodeComponents);
+
+  // 1. Check Outward Code (Sub-District) - e.g. SW1A
+  const firstOutward = parsed[0].outward;
+  if (firstOutward && parsed.every(p => p.outward === firstOutward)) {
+    return firstOutward;
+  }
+
+  // 2. Check District - e.g. SW1
+  const firstDistrict = parsed[0].district;
+  if (firstDistrict && parsed.every(p => p.district === firstDistrict)) {
+    return firstDistrict;
+  }
+
+  // 3. Check Area - e.g. SW
+  const firstArea = parsed[0].area;
+  if (firstArea && parsed.every(p => p.area === firstArea)) {
+    return firstArea;
+  }
+
+  return '';
+}
+
+/**
+ * Fetches the administrative district name for a given outward code
+ */
+export async function fetchPostcodeAreaName(outwardCode: string): Promise<string | null> {
+  try {
+    const response = await fetch(`https://api.postcodes.io/outcodes/${outwardCode}`);
+    const data = await response.json();
+
+    if (data.status === 200 && data.result) {
+      // Prefer admin_district, fall back to parish or admin_county
+      return data.result.admin_district?.[0] ||
+        data.result.parish?.[0] ||
+        data.result.admin_county?.[0] ||
+        null;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Error fetching area name for ${outwardCode}:`, error);
+    return null;
+  }
 }
