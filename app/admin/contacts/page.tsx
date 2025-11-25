@@ -7,6 +7,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../../lib/firebase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import CustomerUploadModal from '../../components/CustomerUploadModal';
 
 const USER_ID = process.env.NEXT_PUBLIC_USER_ID || '1snBR67qkJQfZ68FoDAcM4GY8Qw2';
 
@@ -38,6 +39,7 @@ export default function ContactsPage() {
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   // Check authentication
   useEffect(() => {
@@ -59,15 +61,15 @@ export default function ContactsPage() {
     const fetchContacts = async () => {
       setLoading(true);
       setError('');
-      
+
       try {
         // Fetch contacts from user's subcollection
         const contactsRef = collection(db, 'USERS', USER_ID, 'contacts');
         const q = query(contactsRef, orderBy('lastName', 'asc'), orderBy('firstName', 'asc'));
         const querySnapshot = await getDocs(q);
-        
+
         const fetchedContacts: Contact[] = [];
-        
+
         querySnapshot.forEach((docSnapshot) => {
           const data = docSnapshot.data();
           fetchedContacts.push({
@@ -90,7 +92,7 @@ export default function ContactsPage() {
             mobile: data.mobile,
           });
         });
-        
+
         setContacts(fetchedContacts);
         setFilteredContacts(fetchedContacts);
       } catch (err) {
@@ -104,6 +106,17 @@ export default function ContactsPage() {
     fetchContacts();
   }, [isAuthenticated]);
 
+  const refreshContacts = () => {
+    // Re-trigger the effect by toggling a dependency or just calling the function if extracted
+    // For simplicity, we can just reload the page or re-fetch. 
+    // Since fetchContacts is inside useEffect, let's extract it or just force a reload for now, 
+    // or better, duplicate the fetch logic or move it out.
+    // Actually, the easiest way without refactoring too much is to just reload the window or 
+    // make fetchContacts a useCallback and call it.
+    // Let's just reload the page for a clean state, or better yet, just toggle a refresh trigger.
+    window.location.reload();
+  };
+
   // Apply search filter
   useEffect(() => {
     if (!searchTerm) {
@@ -112,7 +125,7 @@ export default function ContactsPage() {
     }
 
     const term = searchTerm.toLowerCase();
-    const filtered = contacts.filter(contact => 
+    const filtered = contacts.filter(contact =>
       contact.name.toLowerCase().includes(term) ||
       contact.company?.toLowerCase().includes(term) ||
       contact.firstName?.toLowerCase().includes(term) ||
@@ -152,7 +165,7 @@ export default function ContactsPage() {
       <div className="max-w-7xl mx-auto px-4">
         {/* Header */}
         <div className="mb-8">
-          <Link 
+          <Link
             href="/admin"
             className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold mb-4"
           >
@@ -161,7 +174,7 @@ export default function ContactsPage() {
             </svg>
             Back to Dashboard
           </Link>
-          
+
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-4xl font-bold text-gray-900 mb-2">Contacts</h1>
@@ -169,12 +182,21 @@ export default function ContactsPage() {
                 {filteredContacts.length} {filteredContacts.length === 1 ? 'contact' : 'contacts'} found
               </p>
             </div>
-            <Link
-              href="/admin/contacts/new"
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors shadow-md hover:shadow-lg"
-            >
-              New Contact
-            </Link>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="px-4 py-3 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-2"
+              >
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                Upload Contacts
+              </button>
+              <Link
+                href="/admin/contacts/new"
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors shadow-md hover:shadow-lg"
+              >
+                New Contact
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -221,8 +243,8 @@ export default function ContactsPage() {
             </svg>
             <h3 className="text-xl font-bold text-gray-900 mb-2">No contacts found</h3>
             <p className="text-gray-600">
-              {searchTerm 
-                ? 'Try adjusting your search terms to find more contacts.' 
+              {searchTerm
+                ? 'Try adjusting your search terms to find more contacts.'
                 : 'There are no contacts in the system yet.'}
             </p>
           </div>
@@ -245,18 +267,17 @@ export default function ContactsPage() {
                           </span>
                         )}
                         {contact.status && (
-                          <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                            contact.status.toLowerCase() === 'active' 
+                          <span className={`px-3 py-1 text-xs font-semibold rounded-full ${contact.status.toLowerCase() === 'active'
                               ? 'bg-green-100 text-green-700'
                               : contact.status.toLowerCase() === 'inactive'
-                              ? 'bg-gray-100 text-gray-700'
-                              : 'bg-yellow-100 text-yellow-700'
-                          }`}>
+                                ? 'bg-gray-100 text-gray-700'
+                                : 'bg-yellow-100 text-yellow-700'
+                            }`}>
                             {contact.status}
                           </span>
                         )}
                       </div>
-                      
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                         {/* Company */}
                         {contact.company && (
@@ -277,7 +298,7 @@ export default function ContactsPage() {
                             <span className="text-gray-700">{contact.email}</span>
                           </div>
                         )}
-                        
+
                         {/* Mobile/Phone */}
                         {(contact.mobile || contact.phone) && (
                           <div className="flex items-center gap-2">
@@ -322,6 +343,12 @@ export default function ContactsPage() {
           </div>
         )}
       </div>
-    </div>
+
+      <CustomerUploadModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onUploadSuccess={refreshContacts}
+      />
+    </div >
   );
 }

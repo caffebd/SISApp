@@ -58,6 +58,7 @@ function RoutePlanContent() {
     const [originalAppointments, setOriginalAppointments] = useState<Appointment[]>([]);
     const [routeStartTime, setRouteStartTime] = useState<Date | null>(null);
     const [isDirty, setIsDirty] = useState(false);
+    const [returnToOffice, setReturnToOffice] = useState(true);
 
     const [loading, setLoading] = useState(true);
     const [calculating, setCalculating] = useState(false);
@@ -180,15 +181,22 @@ function RoutePlanContent() {
                 }
 
                 const origin = OFFICE_ADDRESS;
-                const destination = OFFICE_ADDRESS; // Return to office
+                let destination = OFFICE_ADDRESS;
+                let waypoints = appointments.map(apt => ({
+                    location: apt.address.postcode,
+                    stopover: true
+                }));
+
+                if (!returnToOffice && appointments.length > 0) {
+                    const lastAppt = appointments[appointments.length - 1];
+                    destination = lastAppt.address.postcode;
+                    waypoints.pop();
+                }
 
                 const request = {
                     origin: origin,
                     destination: destination,
-                    waypoints: appointments.map(apt => ({
-                        location: apt.address.postcode,
-                        stopover: true
-                    })),
+                    waypoints: waypoints,
                     optimizeWaypoints: false, // Keep our time-based order
                     travelMode: google.maps.TravelMode.DRIVING,
                 };
@@ -211,7 +219,7 @@ function RoutePlanContent() {
         };
 
         calculateRoute();
-    }, [appointments, loading]);
+    }, [appointments, loading, returnToOffice]);
 
     const processRouteResult = (result: any, sortedAppointments: Appointment[]) => {
         const legs = result.routes[0].legs;
@@ -320,23 +328,25 @@ function RoutePlanContent() {
         });
 
         // 3. Return to Office
-        const lastLeg = legs[legs.length - 1]; // The last leg is Appt Last -> Office
+        if (returnToOffice) {
+            const lastLeg = legs[legs.length - 1]; // The last leg is Appt Last -> Office
 
-        newSteps.push({
-            type: 'travel',
-            time: formatTime(currentSimulatedTime),
-            description: 'Return to Office',
-            duration: lastLeg.duration.text,
-            distance: lastLeg.distance.text
-        });
+            newSteps.push({
+                type: 'travel',
+                time: formatTime(currentSimulatedTime),
+                description: 'Return to Office',
+                duration: lastLeg.duration.text,
+                distance: lastLeg.distance.text
+            });
 
-        const arrivalAtOffice = new Date(currentSimulatedTime.getTime() + lastLeg.duration.value * 1000);
-        newSteps.push({
-            type: 'end',
-            time: formatTime(arrivalAtOffice),
-            description: 'Arrive at Office',
-            address: OFFICE_ADDRESS
-        });
+            const arrivalAtOffice = new Date(currentSimulatedTime.getTime() + lastLeg.duration.value * 1000);
+            newSteps.push({
+                type: 'end',
+                time: formatTime(arrivalAtOffice),
+                description: 'Arrive at Office',
+                address: OFFICE_ADDRESS
+            });
+        }
 
         setRouteSteps(newSteps);
     };
@@ -565,10 +575,9 @@ function RoutePlanContent() {
                             {routeSteps.length > 0 && (
                                 <>
                                     {/* Return Travel */}
-                                    {(() => {
-                                        // The return travel step is the second to last step
-                                        const returnStep = routeSteps[routeSteps.length - 2];
-                                        if (returnStep && returnStep.type === 'travel') {
+                                    {returnToOffice && (() => {
+                                        const returnStep = routeSteps.find(s => s.type === 'travel' && s.description === 'Return to Office');
+                                        if (returnStep) {
                                             return (
                                                 <div className="px-4 py-2 bg-gray-50 flex items-center gap-2 text-xs text-gray-600 border-b border-gray-100">
                                                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -581,27 +590,39 @@ function RoutePlanContent() {
                                         return null;
                                     })()}
 
-                                    {/* End Step */}
+                                    {/* Arrive at Office Card */}
                                     {(() => {
-                                        const endStep = routeSteps[routeSteps.length - 1];
-                                        if (endStep && endStep.type === 'end') {
-                                            return (
-                                                <div className="p-4 bg-gray-50">
-                                                    <div className="flex items-start gap-4">
-                                                        <div className="flex-shrink-0 w-16 pt-1">
-                                                            <span className="text-sm font-bold text-gray-900">{endStep.time}</span>
-                                                        </div>
-                                                        <div className="flex-grow">
+                                        const endStep = routeSteps.find(s => s.type === 'end');
+                                        return (
+                                            <div className={`p-4 bg-gray-50 transition-all duration-300 ${!returnToOffice ? 'opacity-50 grayscale' : ''}`}>
+                                                <div className="flex items-start gap-4">
+                                                    <div className="flex-shrink-0 w-16 pt-1">
+                                                        <span className="text-sm font-bold text-gray-900">
+                                                            {returnToOffice && endStep ? endStep.time : '--:--'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex-grow flex justify-between items-start">
+                                                        <div>
                                                             <h3 className="font-bold text-gray-800 text-lg">
-                                                                {endStep.description}
+                                                                Arrive at Office
                                                             </h3>
-                                                            <p className="text-xs text-gray-500 mt-1">{endStep.address}</p>
+                                                            <p className="text-xs text-gray-500 mt-1">{OFFICE_ADDRESS}</p>
                                                         </div>
+
+                                                        <button
+                                                            onClick={() => setReturnToOffice(!returnToOffice)}
+                                                            className={`flex-shrink-0 ml-4 relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 ${returnToOffice ? 'bg-teal-500' : 'bg-gray-200'}`}
+                                                            title={returnToOffice ? "Disable return to office" : "Enable return to office"}
+                                                        >
+                                                            <span className="sr-only">Return to office</span>
+                                                            <span
+                                                                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${returnToOffice ? 'translate-x-6' : 'translate-x-1'}`}
+                                                            />
+                                                        </button>
                                                     </div>
                                                 </div>
-                                            );
-                                        }
-                                        return null;
+                                            </div>
+                                        );
                                     })()}
                                 </>
                             )}
