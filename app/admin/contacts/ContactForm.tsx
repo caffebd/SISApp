@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, addDoc, doc, updateDoc, arrayRemove } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, arrayRemove, getDocs, query } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import CompanyLookupModal from '../../components/CompanyLookupModal';
 import DirectorSelectModal from '../../components/DirectorSelectModal';
+import ApplianceModal, { Appliance } from '../../components/ApplianceModal';
 import { CompanySearchResult, Officer } from '../../../lib/companiesHouse';
 
 const USER_ID = process.env.NEXT_PUBLIC_USER_ID || '1snBR67qkJQfZ68FoDAcM4GY8Qw2';
@@ -96,6 +97,12 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
   const [newContactEmail, setNewContactEmail] = useState('');
   const [newContactRelationship, setNewContactRelationship] = useState('');
   const [expandedContactIndex, setExpandedContactIndex] = useState<number | null>(null);
+  const [applianceSearchTerm, setApplianceSearchTerm] = useState('');
+
+  // Appliance State
+  const [appliances, setAppliances] = useState<Appliance[]>([]);
+  const [showApplianceModal, setShowApplianceModal] = useState(false);
+  const [editingAppliance, setEditingAppliance] = useState<Appliance | undefined>(undefined);
 
   // Parse name and extract title
   const parseNameWithTitle = (fullName: string) => {
@@ -197,6 +204,30 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
       setAdditionalContacts(contactData.additionalContacts || []);
     }
   }, [isEdit, contactData]);
+
+  // Fetch appliances
+  const fetchAppliances = async () => {
+    if (!contactData?.id) return;
+
+    try {
+      const appliancesRef = collection(db, 'USERS', USER_ID, 'contacts', contactData.id, 'appliances');
+      const q = query(appliancesRef);
+      const snapshot = await getDocs(q);
+      const loadedAppliances = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Appliance));
+      setAppliances(loadedAppliances);
+    } catch (err) {
+      console.error('Error fetching appliances:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (isEdit && contactData?.id) {
+      fetchAppliances();
+    }
+  }, [isEdit, contactData?.id]);
 
   const handleCustomerToggle = () => {
     if (!isCustomer) {
@@ -780,6 +811,94 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
             </div>
           </div>
 
+          {/* Appliances Section */}
+          {isEdit && (
+            <div className="mt-8">
+              <div className="bg-white rounded-xl shadow-md p-6 border-2 border-gray-100">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-bold text-green-600">Appliances</h2>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg font-semibold transition-colors"
+                    onClick={() => {
+                      setEditingAppliance(undefined);
+                      setShowApplianceModal(true);
+                    }}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Appliance
+                  </button>
+                </div>
+
+                {/* Search */}
+                <div className="mb-4">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search appliances..."
+                      value={applianceSearchTerm}
+                      onChange={(e) => setApplianceSearchTerm(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    />
+                    <svg className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* List */}
+                {appliances.length === 0 ? (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-1">No appliances found</h3>
+                    <p className="text-gray-500">Add an appliance to see it here</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4">
+                    {appliances
+                      .filter(app =>
+                        app.location.toLowerCase().includes(applianceSearchTerm.toLowerCase()) ||
+                        app.type.toLowerCase().includes(applianceSearchTerm.toLowerCase()) ||
+                        app.manufacturer.toLowerCase().includes(applianceSearchTerm.toLowerCase())
+                      )
+                      .map((appliance) => (
+                        <div
+                          key={appliance.id}
+                          className="border border-gray-200 rounded-lg p-4 hover:border-green-500 transition-colors cursor-pointer bg-gray-50"
+                          onClick={() => {
+                            setEditingAppliance(appliance);
+                            setShowApplianceModal(true);
+                          }}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-semibold text-gray-900">{appliance.location} - {appliance.type}</h4>
+                              <p className="text-sm text-gray-600">{appliance.manufacturer} {appliance.model}</p>
+                              <div className="flex gap-2 mt-2">
+                                <span className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded">{appliance.fuelType}</span>
+                                {appliance.lastVisited && (
+                                  <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">Last Visit: {new Date(appliance.lastVisited).toLocaleDateString()}</span>
+                                )}
+                              </div>
+                            </div>
+                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Additional Contacts Section */}
           <div className="mt-8">
             <div className="bg-white rounded-xl shadow-md p-6 border-2 border-gray-100">
@@ -994,6 +1113,20 @@ export default function ContactForm({ isEdit, contactData }: ContactFormProps) {
           </div>
         )}
       </div>
+      {/* Contact Select Modal (for Appliance Modal if needed, but ApplianceModal has its own) */}
+      {/* Actually ApplianceModal imports ContactSelectModal directly so we don't need to render it here for that purpose */}
+
+      {/* Appliance Modal */}
+      {contactData?.id && (
+        <ApplianceModal
+          isOpen={showApplianceModal}
+          onClose={() => setShowApplianceModal(false)}
+          contactId={contactData.id}
+          userId={USER_ID}
+          applianceData={editingAppliance}
+          onSave={fetchAppliances}
+        />
+      )}
     </div>
   );
 }

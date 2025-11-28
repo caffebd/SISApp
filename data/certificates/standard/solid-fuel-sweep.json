@@ -1,0 +1,429 @@
+{
+  "id": "standard-solid-fuel-sweep",
+  "name": "Solid Fuel Sweep Certificate",
+  "description": "Certificate for solid fuel chimney sweeping and safety inspection",
+  "isStandard": true,
+  "elements": [
+    {
+      "id": "header-title",
+      "type": "text-header",
+      "properties": {
+        "text": "SOLID FUEL SWEEP CERTIFICATE",
+        "fontSize": 26,
+        "alignment": "center",
+        "bold": true
+      },
+      "position": { "x": 50, "y": 20 },
+      "size": { "width": 700, "height": 45 }
+    },
+    {
+      "id": "section-customer",
+      "type": "text-header",
+      "properties": {
+        "text": "A. Customer Details",
+        "fontSize": 18,
+        "alignment": "left",
+        "bold": true
+      },
+      "position": { "x": 50, "y": 85 },
+      "size": { "width": 700, "height": 35 }
+    },
+    {
+      "id": "customer-name",
+      "type": "text-input",
+      "properties": {
+        "label": "Customer Name",
+        "placeholder": "Enter customer name",
+        "required": true
+      },
+      "position": { "x": 50, "y": 130 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "customer-telephone",
+      "type": "text-input",
+      "properties": {
+        "label": "Telephone",
+        "placeholder": "Enter telephone",
+        "required": true
+      },
+      "position": { "x": 410, "y": 130 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "customer-address",
+      "type": "text-input",
+      "properties": {
+        "label": "Address",
+        "placeholder": "Enter address",
+        "required": true
+      },
+      "position": { "x": 50, "y": 210 },
+      "size": { "width": 520, "height": 65 }
+    },
+    {
+      "id": "customer-postcode",
+      "type": "text-input",
+      "properties": {
+        "label": "Postcode",
+        "placeholder": "Enter postcode",
+        "required": true
+      },
+      "position": { "x": 590, "y": 210 },
+      "size": { "width": 160, "height": 65 }
+    },
+    {
+      "id": "customer-email",
+      "type": "text-input",
+      "properties": {
+        "label": "Email",
+        "placeholder": "Enter email",
+        "required": false
+      },
+      "position": { "x": 50, "y": 290 },
+      "size": { "width": 700, "height": 65 }
+    },
+    {
+      "id": "section-appliance",
+      "type": "text-header",
+      "properties": {
+        "text": "B. Appliance Details",
+        "fontSize": 18,
+        "alignment": "left",
+        "bold": true
+      },
+      "position": { "x": 50, "y": 375 },
+      "size": { "width": 700, "height": 35 }
+    },
+    {
+      "id": "appliance-location",
+      "type": "text-input",
+      "properties": {
+        "label": "Appliance Location",
+        "placeholder": "e.g., Living Room",
+        "required": true
+      },
+      "position": { "x": 50, "y": 420 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "appliance-type",
+      "type": "text-input",
+      "properties": {
+        "label": "Appliance Type",
+        "placeholder": "e.g., Wood Burner",
+        "required": true
+      },
+      "position": { "x": 410, "y": 420 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "appliance-manufacturer",
+      "type": "text-input",
+      "properties": {
+        "label": "Manufacturer",
+        "placeholder": "Enter manufacturer",
+        "required": false
+      },
+      "position": { "x": 50, "y": 500 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "appliance-model",
+      "type": "text-input",
+      "properties": {
+        "label": "Model",
+        "placeholder": "Enter model",
+        "required": false
+      },
+      "position": { "x": 410, "y": 500 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "fuel-type",
+      "type": "text-input",
+      "properties": {
+        "label": "Fuel Type",
+        "placeholder": "e.g., Wood, Coal",
+        "required": true
+      },
+      "position": { "x": 50, "y": 580 },
+      "size": { "width": 700, "height": 65 }
+    },
+    {
+      "id": "section-sweeping",
+      "type": "text-header",
+      "properties": {
+        "text": "C. Sweeping Information",
+        "fontSize": 18,
+        "alignment": "left",
+        "bold": true
+      },
+      "position": { "x": 50, "y": 665 },
+      "size": { "width": 700, "height": 35 }
+    },
+    {
+      "id": "fuels-used",
+      "type": "text-input",
+      "properties": {
+        "label": "Fuels Used (Wood / Coal / Biomass / S Fuel / Oil / Gas)",
+        "placeholder": "Select applicable fuels",
+        "required": true
+      },
+      "position": { "x": 50, "y": 710 },
+      "size": { "width": 700, "height": 65 }
+    },
+    {
+      "id": "sweeping-method",
+      "type": "dropdown",
+      "properties": {
+        "label": "Sweeping Method",
+        "options": [
+          "Brush & Rods",
+          "Line Weight",
+          "Rotary Power",
+          "Viper Star",
+          "Not Swept",
+          "Pre-Install"
+        ],
+        "required": true
+      },
+      "position": { "x": 50, "y": 790 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "deposits-removed",
+      "type": "text-input",
+      "properties": {
+        "label": "Deposits Removed (Loose lining / Soot / Tar / Fire risk / Flue defective / Other)",
+        "placeholder": "Select deposits removed",
+        "required": false
+      },
+      "position": { "x": 410, "y": 790 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "additional-details",
+      "type": "text-area",
+      "properties": {
+        "label": "Additional Details (Birds nesting material / Debris / Other)",
+        "placeholder": "Enter any additional details...",
+        "required": false
+      },
+      "position": { "x": 50, "y": 870 },
+      "size": { "width": 700, "height": 120 }
+    },
+    {
+      "id": "section-checks",
+      "type": "text-header",
+      "properties": {
+        "text": "D. Visual/Condition Checks",
+        "fontSize": 18,
+        "alignment": "left",
+        "bold": true
+      },
+      "position": { "x": 50, "y": 1010 },
+      "size": { "width": 700, "height": 35 }
+    },
+    {
+      "id": "terminal-condition",
+      "type": "dropdown",
+      "properties": {
+        "label": "Terminal Condition",
+        "options": ["Pass", "Advise", "Fail"],
+        "required": true
+      },
+      "position": { "x": 50, "y": 1055 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "chimney-pot-condition",
+      "type": "dropdown",
+      "properties": {
+        "label": "Chimney Pot/Cowl Condition",
+        "options": ["Pass", "Advise", "Fail"],
+        "required": true
+      },
+      "position": { "x": 410, "y": 1055 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "obstructions-found",
+      "type": "dropdown",
+      "properties": {
+        "label": "Obstructions Found",
+        "options": ["Pass", "Advise", "Fail"],
+        "required": true
+      },
+      "position": { "x": 50, "y": 1135 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "smoke-evacuation",
+      "type": "dropdown",
+      "properties": {
+        "label": "Smoke Evacuation Test",
+        "options": ["Pass", "Advise", "Fail"],
+        "required": true
+      },
+      "position": { "x": 410, "y": 1135 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "ventilation-adequate",
+      "type": "dropdown",
+      "properties": {
+        "label": "Ventilation Adequate",
+        "options": ["Pass", "Advise", "Fail"],
+        "required": true
+      },
+      "position": { "x": 50, "y": 1215 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "co-alarm-installed",
+      "type": "dropdown",
+      "properties": {
+        "label": "CO Alarm Installed",
+        "options": ["Pass", "Advise", "Fail"],
+        "required": true
+      },
+      "position": { "x": 410, "y": 1215 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "fire-safety-concerns",
+      "type": "dropdown",
+      "properties": {
+        "label": "Fire Safety Concerns",
+        "options": ["Pass", "Advise", "Fail"],
+        "required": true
+      },
+      "position": { "x": 50, "y": 1295 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "general-appliance-condition",
+      "type": "dropdown",
+      "properties": {
+        "label": "General Appliance Condition",
+        "options": ["Pass", "Advise", "Fail"],
+        "required": true
+      },
+      "position": { "x": 410, "y": 1295 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "section-co-alarm",
+      "type": "text-header",
+      "properties": {
+        "text": "E. CO Alarm Comments",
+        "fontSize": 18,
+        "alignment": "left",
+        "bold": true
+      },
+      "position": { "x": 50, "y": 1380 },
+      "size": { "width": 700, "height": 35 }
+    },
+    {
+      "id": "co-alarm-comments",
+      "type": "text-area",
+      "properties": {
+        "label": "",
+        "placeholder": "Enter CO alarm comments...",
+        "required": false
+      },
+      "position": { "x": 50, "y": 1425 },
+      "size": { "width": 700, "height": 120 }
+    },
+    {
+      "id": "section-resweep",
+      "type": "text-header",
+      "properties": {
+        "text": "F. Re-Sweep Recommendation",
+        "fontSize": 18,
+        "alignment": "left",
+        "bold": true
+      },
+      "position": { "x": 50, "y": 1565 },
+      "size": { "width": 700, "height": 35 }
+    },
+    {
+      "id": "resweep-interval",
+      "type": "dropdown",
+      "properties": {
+        "label": "Recommended Re-Sweep Interval",
+        "options": ["3 months", "6 months", "12 months", "24 months"],
+        "required": true
+      },
+      "position": { "x": 50, "y": 1610 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "section-signoff",
+      "type": "text-header",
+      "properties": {
+        "text": "G. Engineer & Customer Sign-Off",
+        "fontSize": 18,
+        "alignment": "left",
+        "bold": true
+      },
+      "position": { "x": 50, "y": 1695 },
+      "size": { "width": 700, "height": 35 }
+    },
+    {
+      "id": "engineer-name",
+      "type": "text-input",
+      "properties": {
+        "label": "Engineer Name",
+        "placeholder": "Enter engineer name",
+        "required": true
+      },
+      "position": { "x": 50, "y": 1740 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "business-name",
+      "type": "text-input",
+      "properties": {
+        "label": "Business Name",
+        "placeholder": "Enter business name",
+        "required": true
+      },
+      "position": { "x": 410, "y": 1740 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "certificate-date",
+      "type": "date-input",
+      "properties": {
+        "label": "Date",
+        "required": true
+      },
+      "position": { "x": 50, "y": 1820 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "certificate-number",
+      "type": "text-input",
+      "properties": {
+        "label": "Certificate Number",
+        "placeholder": "Auto-generated",
+        "required": true
+      },
+      "position": { "x": 410, "y": 1820 },
+      "size": { "width": 340, "height": 65 }
+    },
+    {
+      "id": "customer-signature-name",
+      "type": "text-input",
+      "properties": {
+        "label": "Customer Name (for signature)",
+        "placeholder": "Customer to sign",
+        "required": false
+      },
+      "position": { "x": 50, "y": 1900 },
+      "size": { "width": 340, "height": 65 }
+    }
+  ]
+}

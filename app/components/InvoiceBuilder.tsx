@@ -250,6 +250,7 @@ const InvoiceBuilder = forwardRef<InvoiceBuilderHandle, InvoiceBuilderProps>(fun
                                             <label
                                                 className="cursor-pointer px-3 py-1.5 bg-white text-gray-900 text-sm rounded-md font-medium hover:bg-gray-100 transition-colors shadow-sm"
                                                 onMouseDown={(e) => e.stopPropagation()}
+                                                onClick={(e) => e.stopPropagation()}
                                             >
                                                 Change Image
                                                 <input
@@ -271,10 +272,9 @@ const InvoiceBuilder = forwardRef<InvoiceBuilderHandle, InvoiceBuilderProps>(fun
                                         </div>
                                     </div>
                                 ) : (
-                                    <label
-                                        className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors relative group ${dragOverElement === element.id ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white hover:bg-gray-50'
+                                    <div
+                                        className={`flex flex-col items-center justify-center w-full h-32 border-4 border-dashed rounded-xl transition-colors relative p-3 ${dragOverElement === element.id ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white hover:bg-gray-50'
                                             }`}
-                                        onMouseDown={(e) => e.stopPropagation()}
                                         onDragOver={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
@@ -299,7 +299,11 @@ const InvoiceBuilder = forwardRef<InvoiceBuilderHandle, InvoiceBuilderProps>(fun
                                             }
                                         }}
                                     >
-                                        <div className="flex flex-col items-center justify-center text-center p-2">
+                                        <label
+                                            className="flex flex-col items-center justify-center text-center cursor-pointer"
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
                                             <div className={`mb-2 p-2 rounded-full transition-colors ${dragOverElement === element.id ? 'bg-blue-100' : 'bg-blue-50 group-hover:bg-blue-100'
                                                 }`}>
                                                 <svg className="w-6 h-6 text-blue-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -312,23 +316,23 @@ const InvoiceBuilder = forwardRef<InvoiceBuilderHandle, InvoiceBuilderProps>(fun
                                             <p className="text-xs text-gray-400 font-medium mt-1">
                                                 Drag & Drop or browse
                                             </p>
-                                        </div>
-                                        <input
-                                            type="file"
-                                            className="hidden"
-                                            accept="image/png, image/jpeg, image/jpg"
-                                            onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) {
-                                                    const reader = new FileReader();
-                                                    reader.onloadend = () => {
-                                                        handlePropertyChange(element.id, 'imageUrl', reader.result as string);
-                                                    };
-                                                    reader.readAsDataURL(file);
-                                                }
-                                            }}
-                                        />
-                                    </label>
+                                            <input
+                                                type="file"
+                                                className="hidden"
+                                                accept="image/png, image/jpeg, image/jpg"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        const reader = new FileReader();
+                                                        reader.onloadend = () => {
+                                                            handlePropertyChange(element.id, 'imageUrl', reader.result as string);
+                                                        };
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }}
+                                            />
+                                        </label>
+                                    </div>
                                 )}
                             </div>
                         )}

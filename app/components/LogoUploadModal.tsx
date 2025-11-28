@@ -1,10 +1,11 @@
-'use client';
+"use client";
 
-import { useState, useCallback, useRef } from 'react';
-import Cropper from 'react-easy-crop';
-import type { Area } from 'react-easy-crop';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../../lib/firebase';
+import { useState, useCallback, useRef } from "react";
+import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { doc, updateDoc } from "firebase/firestore";
+import { storage, db } from "../../lib/firebase";
 
 interface LogoUploadModalProps {
   isOpen: boolean;
@@ -17,8 +18,8 @@ interface LogoUploadModalProps {
 const createImage = (url: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const image = new Image();
-    image.addEventListener('load', () => resolve(image));
-    image.addEventListener('error', (error) => reject(error));
+    image.addEventListener("load", () => resolve(image));
+    image.addEventListener("error", (error) => reject(error));
     image.src = url;
   });
 
@@ -26,14 +27,14 @@ const createImage = (url: string): Promise<HTMLImageElement> =>
 async function getCroppedImg(
   imageSrc: string,
   pixelCrop: Area,
-  fileType: string = 'image/png'
+  fileType: string = "image/png",
 ): Promise<Blob> {
   const image = await createImage(imageSrc);
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
 
   if (!ctx) {
-    throw new Error('No 2d context');
+    throw new Error("No 2d context");
   }
 
   // Set canvas size to the cropped area
@@ -41,7 +42,7 @@ async function getCroppedImg(
   canvas.height = pixelCrop.height;
 
   // Clear canvas with transparency for PNG
-  if (fileType === 'image/png') {
+  if (fileType === "image/png") {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
@@ -55,18 +56,22 @@ async function getCroppedImg(
     0,
     0,
     pixelCrop.width,
-    pixelCrop.height
+    pixelCrop.height,
   );
 
   // Convert canvas to blob - use PNG to preserve transparency
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) {
-        resolve(blob);
-      } else {
-        reject(new Error('Canvas is empty'));
-      }
-    }, fileType, fileType === 'image/jpeg' ? 0.95 : 1.0);
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error("Canvas is empty"));
+        }
+      },
+      fileType,
+      fileType === "image/jpeg" ? 0.95 : 1.0,
+    );
   });
 }
 
@@ -81,39 +86,68 @@ export default function LogoUploadModal({
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState('');
-  const [fileType, setFileType] = useState<string>('image/png');
+  const [error, setError] = useState("");
+  const [fileType, setFileType] = useState<string>("image/png");
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const onCropComplete = useCallback((croppedArea: Area, croppedAreaPixels: Area) => {
-    setCroppedAreaPixels(croppedAreaPixels);
-  }, []);
+  const onCropComplete = useCallback(
+    (croppedArea: Area, croppedAreaPixels: Area) => {
+      setCroppedAreaPixels(croppedAreaPixels);
+    },
+    [],
+  );
+
+  const processFile = (file: File) => {
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image size should be less than 5MB");
+      return;
+    }
+
+    // Store the file type to preserve it during cropping
+    setFileType(file.type);
+
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      setImageSrc(reader.result as string);
+      setError("");
+    });
+    reader.readAsDataURL(file);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        setError('Please select an image file');
-        return;
-      }
+      processFile(e.target.files[0]);
+    }
+  };
 
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setError('Image size should be less than 5MB');
-        return;
-      }
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
 
-      // Store the file type to preserve it during cropping
-      setFileType(file.type);
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
 
-      const reader = new FileReader();
-      reader.addEventListener('load', () => {
-        setImageSrc(reader.result as string);
-        setError('');
-      });
-      reader.readAsDataURL(file);
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file);
     }
   };
 
@@ -121,11 +155,15 @@ export default function LogoUploadModal({
     if (!imageSrc || !croppedAreaPixels) return;
 
     setUploading(true);
-    setError('');
+    setError("");
 
     try {
       // Get cropped image blob, preserving the original file type
-      const croppedBlob = await getCroppedImg(imageSrc, croppedAreaPixels, fileType);
+      const croppedBlob = await getCroppedImg(
+        imageSrc,
+        croppedAreaPixels,
+        fileType,
+      );
 
       // Upload to Firebase Storage
       const storageRef = ref(storage, `${userId}/logo`);
@@ -136,11 +174,17 @@ export default function LogoUploadModal({
       // Get download URL
       const downloadURL = await getDownloadURL(storageRef);
 
+      // Save logoUrl to Firestore
+      const userDocRef = doc(db, "USERS", userId);
+      await updateDoc(userDocRef, {
+        logoUrl: downloadURL,
+      });
+
       onSuccess(downloadURL);
       handleClose();
     } catch (err) {
-      console.error('Error uploading logo:', err);
-      setError('Failed to upload logo. Please try again.');
+      console.error("Error uploading logo:", err);
+      setError("Failed to upload logo. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -151,10 +195,11 @@ export default function LogoUploadModal({
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setCroppedAreaPixels(null);
-    setError('');
-    setFileType('image/png');
+    setError("");
+    setFileType("image/png");
+    setIsDragging(false);
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
     }
     onClose();
   };
@@ -176,8 +221,18 @@ export default function LogoUploadModal({
             disabled={uploading}
             className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -202,18 +257,47 @@ export default function LogoUploadModal({
 
           {!imageSrc ? (
             // Upload Area
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center">
-              <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Select an image</h3>
-              <p className="text-gray-600 mb-4">PNG, JPG or GIF (max. 5MB)</p>
-              <button
-                onClick={handleSelectImage}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={handleSelectImage}
+              className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
+                isDragging
+                  ? "border-blue-500 bg-blue-50"
+                  : "border-gray-300 hover:border-blue-400 hover:bg-gray-50"
+              }`}
+            >
+              <svg
+                className={`w-16 h-16 mx-auto mb-4 transition-colors ${
+                  isDragging ? "text-blue-500" : "text-gray-400"
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                Choose File
-              </button>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <h3
+                className={`text-lg font-semibold mb-2 transition-colors ${
+                  isDragging ? "text-blue-600" : "text-gray-900"
+                }`}
+              >
+                {isDragging ? "Drop image here" : "Select an image"}
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {isDragging
+                  ? "Release to upload"
+                  : "Drag & Drop or click to browse"}
+              </p>
+              <p className="text-sm text-gray-500">
+                PNG, JPG or GIF (max. 5MB)
+              </p>
             </div>
           ) : (
             // Crop Area
@@ -232,7 +316,10 @@ export default function LogoUploadModal({
 
               {/* Zoom Slider */}
               <div className="mb-6">
-                <label htmlFor="zoom" className="block text-sm font-semibold text-gray-700 mb-2">
+                <label
+                  htmlFor="zoom"
+                  className="block text-sm font-semibold text-gray-700 mb-2"
+                >
                   Zoom
                 </label>
                 <input
@@ -280,8 +367,18 @@ export default function LogoUploadModal({
               </>
             ) : (
               <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                  />
                 </svg>
                 Upload Logo
               </>
