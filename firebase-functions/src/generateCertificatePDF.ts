@@ -8,6 +8,7 @@ const db = admin.firestore();
 interface CertificateData {
   name: string;
   templateName: string;
+  templateId?: string;
   customer: {
     name: string;
     address: string;
@@ -30,6 +31,7 @@ interface CertificateData {
   };
   status: string;
   issuedDate: string;
+  isStandard?: boolean;
 }
 
 interface BusinessDetails {
@@ -93,6 +95,11 @@ function generateCertificateHTML(
   certificate: CertificateData,
   businessDetails: BusinessDetails,
 ): string {
+  // Check if this is a standard certificate
+  const isStandard =
+    certificate.templateId?.startsWith("standard-") ||
+    certificate.isStandard === true;
+
   // Helper to check if field should be shown
   const shouldShowField = (fieldName: string): boolean => {
     if (!certificate.visibleApplianceFields) return true;
@@ -170,7 +177,78 @@ function generateCertificateHTML(
     applianceFieldsHTML = fields.join("");
   }
 
-  // Filter fields for left column (sweeping + resweep)
+  // For user-created (non-standard) certificates, generate simple single-column layout
+  if (!isStandard) {
+    let allFieldsHTML = "";
+    certificate.fields.forEach((field: any) => {
+      const value = renderFieldValue(field);
+      if (!value) return;
+
+      if (field.type === "textbox") {
+        allFieldsHTML += `<div class="field"><p class="value font-medium text-sm">${value}</p></div>`;
+      } else if (field.type === "checkbox") {
+        allFieldsHTML += `<div class="field checkbox">${value}</div>`;
+      } else {
+        const label = field.properties?.label || "";
+        allFieldsHTML += `
+          <div class="field">
+            ${label ? `<span class="label">${label}:</span>` : ""}
+            <p class="value">${value}</p>
+          </div>
+        `;
+      }
+    });
+
+    let signaturesHTML = "";
+    if (
+      certificate.signatures &&
+      (certificate.signatures.engineer || certificate.signatures.customer)
+    ) {
+      signaturesHTML = '<div class="signatures">';
+
+      if (certificate.signatures.engineer) {
+        signaturesHTML += `
+          <div class="signature-box">
+            <p class="sig-label">Engineer Signature:</p>
+            <div class="sig-container">
+              ${
+                certificate.signatures.engineer.type === "drawn"
+                  ? `<img src="${certificate.signatures.engineer.data}" alt="Engineer signature" />`
+                  : `<p class="typed-sig">${certificate.signatures.engineer.data}</p>`
+              }
+            </div>
+          </div>
+        `;
+      }
+
+      if (certificate.signatures.customer) {
+        signaturesHTML += `
+          <div class="signature-box">
+            <p class="sig-label">Customer Signature:</p>
+            <div class="sig-container">
+              ${
+                certificate.signatures.customer.type === "drawn"
+                  ? `<img src="${certificate.signatures.customer.data}" alt="Customer signature" />`
+                  : `<p class="typed-sig">${certificate.signatures.customer.data}</p>`
+              }
+            </div>
+          </div>
+        `;
+      }
+
+      signaturesHTML += "</div>";
+    }
+
+    return generateUserCreatedCertificateHTML(
+      certificate,
+      businessDetails,
+      applianceFieldsHTML,
+      allFieldsHTML,
+      signaturesHTML,
+    );
+  }
+
+  // Standard certificate: Filter fields for left column (sweeping + resweep)
   const leftColumnFields = certificate.fields.filter((field: any) => {
     if (
       field.id === "header-title" ||
@@ -797,6 +875,292 @@ function generateCertificateHTML(
       <!-- Signatures -->
       ${signaturesHTML}
     </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>This certificate was issued on ${formatDate(certificate.issuedDate)} and is valid as of the date of inspection.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+}
+
+// Generate HTML for user-created certificates (simpler layout)
+function generateUserCreatedCertificateHTML(
+  certificate: CertificateData,
+  businessDetails: BusinessDetails,
+  applianceFieldsHTML: string,
+  allFieldsHTML: string,
+  signaturesHTML: string,
+): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    @page {
+      size: A4 landscape;
+      margin: 10mm;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: white;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .certificate-page {
+      width: 277mm;
+      min-height: 190mm;
+      background: white;
+      padding: 16px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #1f2937;
+    }
+
+    .header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #111827;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+      margin-bottom: 4px;
+    }
+
+    .header p {
+      font-size: 10px;
+      color: #4b5563;
+    }
+
+    .info-boxes {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .info-box {
+      border: 1px solid #d1d5db;
+      border-radius: 2px;
+      padding: 8px;
+    }
+
+    .info-box h2 {
+      font-size: 11px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 4px;
+      padding-bottom: 3px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .info-box .content {
+      font-size: 10px;
+    }
+
+    .info-box .content > div {
+      margin-top: 2px;
+    }
+
+    .info-box .label {
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .info-box .value {
+      color: #111827;
+      margin: 0;
+    }
+
+    .logo {
+      max-height: 50px;
+      max-width: 100%;
+      margin-bottom: 4px;
+      object-fit: contain;
+    }
+
+    .certificate-fields {
+      border: 1px solid #d1d5db;
+      border-radius: 2px;
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+
+    .field {
+      font-size: 11px;
+      margin-top: 6px;
+    }
+
+    .field:first-child {
+      margin-top: 0;
+    }
+
+    .field .label {
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .field .value {
+      color: #111827;
+      margin-top: 2px;
+      white-space: pre-wrap;
+    }
+
+    .field.checkbox {
+      display: flex;
+      align-items: flex-start;
+    }
+
+    .font-medium {
+      font-weight: 500;
+    }
+
+    .text-sm {
+      font-size: 12px;
+    }
+
+    .signatures {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      padding: 8px;
+      margin-top: 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 2px;
+    }
+
+    .signature-box {
+      text-align: center;
+    }
+
+    .signature-box .sig-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 4px;
+    }
+
+    .signature-box .sig-container {
+      border: 1px solid #d1d5db;
+      border-radius: 2px;
+      padding: 4px;
+      background: white;
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .signature-box img {
+      max-height: 40px;
+      max-width: 100%;
+    }
+
+    .signature-box .typed-sig {
+      font-size: 16px;
+      font-family: cursive;
+    }
+
+    .footer {
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px solid #d1d5db;
+      text-align: center;
+    }
+
+    .footer p {
+      font-size: 10px;
+      color: #4b5563;
+    }
+  </style>
+</head>
+<body>
+  <div class="certificate-page">
+    <!-- Header -->
+    <div class="header">
+      <h1>${certificate.templateName}</h1>
+      <p>Certificate Reference: ${certificate.name} | Issue Date: ${formatDate(certificate.issuedDate)}</p>
+    </div>
+
+    <!-- Three Column Layout: Business, Customer, Appliance -->
+    <div class="info-boxes">
+      <!-- Business Details -->
+      <div class="info-box">
+        <h2>Business Details</h2>
+        <div class="content">
+          ${businessDetails.logoUrl ? `<img src="${businessDetails.logoUrl}" alt="Logo" class="logo" onerror="this.style.display='none'" />` : ""}
+          <div><strong>${businessDetails.businessName || ""}</strong></div>
+          ${businessDetails.companyNumber ? `<div>Company No: ${businessDetails.companyNumber}</div>` : ""}
+          <div style="white-space: pre-line;">${businessDetails.businessAddress || ""}</div>
+          <div>${businessDetails.businessPhone || ""}</div>
+          <div>${businessDetails.businessEmail || ""}</div>
+        </div>
+      </div>
+
+      <!-- Customer Details -->
+      <div class="info-box">
+        <h2>Customer Details</h2>
+        <div class="content">
+          <div>
+            <span class="label">Name:</span>
+            <p class="value">${certificate.customer.name}</p>
+          </div>
+          <div>
+            <span class="label">Address:</span>
+            <p class="value">${certificate.customer.address}</p>
+          </div>
+          <div>
+            <span class="label">Postcode:</span>
+            <p class="value">${certificate.customer.postcode}</p>
+          </div>
+          <div>
+            <span class="label">Telephone:</span>
+            <p class="value">${certificate.customer.telephone}</p>
+          </div>
+          <div>
+            <span class="label">Email:</span>
+            <p class="value">${certificate.customer.email}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Appliance Details -->
+      ${
+        certificate.appliance
+          ? `
+      <div class="info-box">
+        <h2>Appliance Details</h2>
+        <div class="content">
+          ${applianceFieldsHTML}
+        </div>
+      </div>
+      `
+          : '<div class="info-box"></div>'
+      }
+    </div>
+
+    <!-- Certificate Fields - Single Column (User-Created Certificate) -->
+    <div class="certificate-fields">
+      ${allFieldsHTML}
+    </div>
+
+    <!-- Signatures -->
+    ${signaturesHTML}
 
     <!-- Footer -->
     <div class="footer">

@@ -420,6 +420,7 @@ function IssueCertificatePageContent() {
         issuedDate: new Date().toISOString(),
         createdAt: serverTimestamp(),
         createdBy: userId,
+        isStandard: selectedTemplate.isStandard || false,
       };
 
       // Save to Firestore under the contact's issuedCertificates collection

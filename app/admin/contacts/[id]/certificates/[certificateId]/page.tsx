@@ -53,6 +53,7 @@ interface CertificateData {
   issuedDate: string;
   createdAt: any;
   createdBy: string;
+  isStandard?: boolean;
 }
 
 export default function CertificateViewerPage() {
@@ -727,306 +728,344 @@ export default function CertificateViewerPage() {
               )}
             </div>
 
-            {/* Certificate Fields - Two Column Layout */}
-            <div className="grid grid-cols-2 gap-2 mb-2">
-              <div className="border border-gray-300 rounded p-2 space-y-1">
-                {certificate.fields
-                  .filter((field) => {
-                    // Filter out main title
-                    if (
-                      field.id === "header-title" &&
-                      field.type === "text-header"
-                    ) {
-                      return false;
-                    }
-
-                    // Filter out Section A, B, and G
-                    if (
-                      field.id === "section-customer" ||
-                      field.id === "customer-name" ||
-                      field.id === "customer-address" ||
-                      field.id === "customer-postcode" ||
-                      field.id === "customer-telephone" ||
-                      field.id === "customer-email" ||
-                      field.id === "section-appliance" ||
-                      field.id === "appliance-location" ||
-                      field.id === "appliance-type" ||
-                      field.id === "appliance-manufacturer" ||
-                      field.id === "appliance-model" ||
-                      field.id === "fuel-type" ||
-                      field.id === "section-signoff" ||
-                      field.id === "engineer-name" ||
-                      field.id === "business-name" ||
-                      field.id === "certificate-date" ||
-                      field.id === "certificate-number" ||
-                      field.id === "customer-signature-name"
-                    ) {
-                      return false;
-                    }
-
-                    // Left column: section C (sweeping) and F (resweep)
-                    if (
-                      field.id.includes("sweeping") ||
-                      field.id.includes("fuels-used") ||
-                      field.id.includes("sweeping-method") ||
-                      field.id.includes("deposits") ||
-                      field.id.includes("additional") ||
-                      field.id === "section-sweeping" ||
-                      field.id === "section-resweep" ||
-                      field.id === "resweep-interval"
-                    ) {
-                      return true;
-                    }
-
-                    return false;
-                  })
-                  .map((field) => {
-                    // Handle section headers separately
-                    if (field.type === "text-header") {
-                      const text = field.properties.text || "";
-                      const isSectionHeader = /^[A-Z]\.\s/.test(text);
-
-                      if (isSectionHeader) {
-                        // Remove the letter prefix (e.g., "C. " from "C. Sweeping Information")
-                        const textWithoutPrefix = text.replace(
-                          /^[A-Z]\.\s/,
-                          "",
-                        );
-                        return (
-                          <div
-                            key={field.id}
-                            className="mt-2 mb-1 pt-1.5 border-t border-gray-200 first:mt-0 first:pt-0 first:border-t-0"
-                          >
-                            <h3 className="text-[11px] font-bold text-gray-900">
-                              {textWithoutPrefix}
-                            </h3>
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div
-                            key={field.id}
-                            className="text-[10px] font-medium text-gray-700 mb-0.5"
-                          >
-                            {text}
-                          </div>
-                        );
+            {/* Certificate Fields - Conditional Layout Based on Certificate Type */}
+            {certificate.templateId?.startsWith("standard-") ||
+            certificate.isStandard ? (
+              /* Standard Certificate: Two Column Layout */
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div className="border border-gray-300 rounded p-2 space-y-1">
+                  {certificate.fields
+                    .filter((field) => {
+                      // Filter out main title
+                      if (
+                        field.id === "header-title" &&
+                        field.type === "text-header"
+                      ) {
+                        return false;
                       }
-                    }
 
-                    const value = renderFieldValue(field);
-                    if (!value) return null;
+                      // Filter out Section A, B, and G
+                      if (
+                        field.id === "section-customer" ||
+                        field.id === "customer-name" ||
+                        field.id === "customer-address" ||
+                        field.id === "customer-postcode" ||
+                        field.id === "customer-telephone" ||
+                        field.id === "customer-email" ||
+                        field.id === "section-appliance" ||
+                        field.id === "appliance-location" ||
+                        field.id === "appliance-type" ||
+                        field.id === "appliance-manufacturer" ||
+                        field.id === "appliance-model" ||
+                        field.id === "fuel-type" ||
+                        field.id === "section-signoff" ||
+                        field.id === "engineer-name" ||
+                        field.id === "business-name" ||
+                        field.id === "certificate-date" ||
+                        field.id === "certificate-number" ||
+                        field.id === "customer-signature-name"
+                      ) {
+                        return false;
+                      }
 
-                    return (
-                      <div key={field.id} className="text-[10px]">
-                        {field.type === "textbox" ? (
-                          <p className="text-gray-900 font-medium">{value}</p>
-                        ) : field.type === "checkbox" ? (
-                          <div className="flex items-start">{value}</div>
-                        ) : (
-                          <div>
-                            {field.properties.label && (
-                              <span className="font-semibold text-gray-700">
-                                {field.properties.label}:
-                              </span>
-                            )}
-                            <p className="text-gray-900 mt-0.5 whitespace-pre-wrap">
-                              {value}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
+                      // Left column: section C (sweeping) and F (resweep)
+                      if (
+                        field.id.includes("sweeping") ||
+                        field.id.includes("fuels-used") ||
+                        field.id.includes("sweeping-method") ||
+                        field.id.includes("deposits") ||
+                        field.id.includes("additional") ||
+                        field.id === "section-sweeping" ||
+                        field.id === "section-resweep" ||
+                        field.id === "resweep-interval"
+                      ) {
+                        return true;
+                      }
 
-              <div className="border border-gray-300 rounded p-2 space-y-1">
-                {certificate.fields
-                  .filter((field) => {
-                    // Filter out main title
-                    if (
-                      field.id === "header-title" &&
-                      field.type === "text-header"
-                    ) {
                       return false;
-                    }
+                    })
+                    .map((field) => {
+                      // Handle section headers separately
+                      if (field.type === "text-header") {
+                        const text = field.properties.text || "";
+                        const isSectionHeader = /^[A-Z]\.\s/.test(text);
 
-                    // Filter out Section A, B, and G
-                    if (
-                      field.id === "section-customer" ||
-                      field.id === "customer-name" ||
-                      field.id === "customer-address" ||
-                      field.id === "customer-postcode" ||
-                      field.id === "customer-telephone" ||
-                      field.id === "customer-email" ||
-                      field.id === "section-appliance" ||
-                      field.id === "appliance-location" ||
-                      field.id === "appliance-type" ||
-                      field.id === "appliance-manufacturer" ||
-                      field.id === "appliance-model" ||
-                      field.id === "fuel-type" ||
-                      field.id === "section-signoff" ||
-                      field.id === "engineer-name" ||
-                      field.id === "business-name" ||
-                      field.id === "certificate-date" ||
-                      field.id === "certificate-number" ||
-                      field.id === "customer-signature-name"
-                    ) {
-                      return false;
-                    }
-
-                    // Right column: sections D, E (checks, co alarm)
-                    if (
-                      field.id.includes("terminal") ||
-                      field.id.includes("chimney") ||
-                      field.id.includes("obstruction") ||
-                      field.id.includes("smoke") ||
-                      field.id.includes("ventilation") ||
-                      field.id.includes("co-alarm") ||
-                      field.id.includes("fire-safety") ||
-                      field.id.includes("general-appliance") ||
-                      field.id === "section-checks" ||
-                      field.id === "section-co-alarm" ||
-                      field.id === "co-alarm-comments"
-                    ) {
-                      return true;
-                    }
-
-                    return false;
-                  })
-                  .map((field) => {
-                    // Handle section headers separately
-                    if (field.type === "text-header") {
-                      const text = field.properties.text || "";
-                      const isSectionHeader = /^[A-Z]\.\s/.test(text);
-
-                      if (isSectionHeader) {
-                        // Remove the letter prefix
-                        const textWithoutPrefix = text.replace(
-                          /^[A-Z]\.\s/,
-                          "",
-                        );
-
-                        // Check if this is Visual/Condition Checks section
-                        const isChecksSection = field.id === "section-checks";
-
-                        if (isChecksSection) {
-                          // Get the condition check fields
-                          const checkFields = certificate.fields.filter(
-                            (f) =>
-                              f.id === "terminal-condition" ||
-                              f.id === "chimney-pot-condition" ||
-                              f.id === "obstructions-found" ||
-                              f.id === "smoke-evacuation" ||
-                              f.id === "ventilation-adequate" ||
-                              f.id === "co-alarm-installed" ||
-                              f.id === "fire-safety-concerns" ||
-                              f.id === "general-appliance-condition",
+                        if (isSectionHeader) {
+                          // Remove the letter prefix (e.g., "C. " from "C. Sweeping Information")
+                          const textWithoutPrefix = text.replace(
+                            /^[A-Z]\.\s/,
+                            "",
                           );
-
-                          // Split into two columns
-                          const leftChecks = checkFields.slice(0, 4);
-                          const rightChecks = checkFields.slice(4);
-
                           return (
-                            <div key={field.id}>
-                              <div className="mt-2 mb-1 pt-1.5 border-t border-gray-200 first:mt-0 first:pt-0 first:border-t-0">
-                                <h3 className="text-[11px] font-bold text-gray-900">
-                                  {textWithoutPrefix}
-                                </h3>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="space-y-1">
-                                  {leftChecks.map((checkField) => {
-                                    const value = renderFieldValue(checkField);
-                                    if (!value) return null;
-                                    return (
-                                      <div
-                                        key={checkField.id}
-                                        className="text-[10px]"
-                                      >
-                                        <span className="font-semibold text-gray-700">
-                                          {checkField.properties.label}:
-                                        </span>
-                                        <p className="text-gray-900 mt-0.5">
-                                          {value}
-                                        </p>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                <div className="space-y-1">
-                                  {rightChecks.map((checkField) => {
-                                    const value = renderFieldValue(checkField);
-                                    if (!value) return null;
-                                    return (
-                                      <div
-                                        key={checkField.id}
-                                        className="text-[10px]"
-                                      >
-                                        <span className="font-semibold text-gray-700">
-                                          {checkField.properties.label}:
-                                        </span>
-                                        <p className="text-gray-900 mt-0.5">
-                                          {value}
-                                        </p>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
+                            <div
+                              key={field.id}
+                              className="mt-2 mb-1 pt-1.5 border-t border-gray-200 first:mt-0 first:pt-0 first:border-t-0"
+                            >
+                              <h3 className="text-[11px] font-bold text-gray-900">
+                                {textWithoutPrefix}
+                              </h3>
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div
+                              key={field.id}
+                              className="text-[10px] font-medium text-gray-700 mb-0.5"
+                            >
+                              {text}
                             </div>
                           );
                         }
-
-                        return (
-                          <div
-                            key={field.id}
-                            className="mt-2 mb-1 pt-1.5 border-t border-gray-200 first:mt-0 first:pt-0 first:border-t-0"
-                          >
-                            <h3 className="text-[11px] font-bold text-gray-900">
-                              {textWithoutPrefix}
-                            </h3>
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div
-                            key={field.id}
-                            className="text-[10px] font-medium text-gray-700 mb-0.5"
-                          >
-                            {text}
-                          </div>
-                        );
                       }
-                    }
 
-                    // Skip individual condition check fields as they're rendered in the section header
-                    if (
-                      field.id === "terminal-condition" ||
-                      field.id === "chimney-pot-condition" ||
-                      field.id === "obstructions-found" ||
-                      field.id === "smoke-evacuation" ||
-                      field.id === "ventilation-adequate" ||
-                      field.id === "co-alarm-installed" ||
-                      field.id === "fire-safety-concerns" ||
-                      field.id === "general-appliance-condition"
-                    ) {
-                      return null;
-                    }
+                      const value = renderFieldValue(field);
+                      if (!value) return null;
 
+                      return (
+                        <div key={field.id} className="text-[10px]">
+                          {field.type === "textbox" ? (
+                            <p className="text-gray-900 font-medium">{value}</p>
+                          ) : field.type === "checkbox" ? (
+                            <div className="flex items-start">{value}</div>
+                          ) : (
+                            <div>
+                              {field.properties.label && (
+                                <span className="font-semibold text-gray-700">
+                                  {field.properties.label}:
+                                </span>
+                              )}
+                              <p className="text-gray-900 mt-0.5 whitespace-pre-wrap">
+                                {value}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+
+                <div className="border border-gray-300 rounded p-2 space-y-1">
+                  {certificate.fields
+                    .filter((field) => {
+                      // Filter out main title
+                      if (
+                        field.id === "header-title" &&
+                        field.type === "text-header"
+                      ) {
+                        return false;
+                      }
+
+                      // Filter out Section A, B, and G
+                      if (
+                        field.id === "section-customer" ||
+                        field.id === "customer-name" ||
+                        field.id === "customer-address" ||
+                        field.id === "customer-postcode" ||
+                        field.id === "customer-telephone" ||
+                        field.id === "customer-email" ||
+                        field.id === "section-appliance" ||
+                        field.id === "appliance-location" ||
+                        field.id === "appliance-type" ||
+                        field.id === "appliance-manufacturer" ||
+                        field.id === "appliance-model" ||
+                        field.id === "fuel-type" ||
+                        field.id === "section-signoff" ||
+                        field.id === "engineer-name" ||
+                        field.id === "business-name" ||
+                        field.id === "certificate-date" ||
+                        field.id === "certificate-number" ||
+                        field.id === "customer-signature-name"
+                      ) {
+                        return false;
+                      }
+
+                      // Right column: sections D, E (checks, co alarm)
+                      if (
+                        field.id.includes("terminal") ||
+                        field.id.includes("chimney") ||
+                        field.id.includes("obstruction") ||
+                        field.id.includes("smoke") ||
+                        field.id.includes("ventilation") ||
+                        field.id.includes("co-alarm") ||
+                        field.id.includes("fire-safety") ||
+                        field.id.includes("general-appliance") ||
+                        field.id === "section-checks" ||
+                        field.id === "section-co-alarm" ||
+                        field.id === "co-alarm-comments"
+                      ) {
+                        return true;
+                      }
+
+                      return false;
+                    })
+                    .map((field) => {
+                      // Handle section headers separately
+                      if (field.type === "text-header") {
+                        const text = field.properties.text || "";
+                        const isSectionHeader = /^[A-Z]\.\s/.test(text);
+
+                        if (isSectionHeader) {
+                          // Remove the letter prefix
+                          const textWithoutPrefix = text.replace(
+                            /^[A-Z]\.\s/,
+                            "",
+                          );
+
+                          // Check if this is Visual/Condition Checks section
+                          const isChecksSection = field.id === "section-checks";
+
+                          if (isChecksSection) {
+                            // Get the condition check fields
+                            const checkFields = certificate.fields.filter(
+                              (f) =>
+                                f.id === "terminal-condition" ||
+                                f.id === "chimney-pot-condition" ||
+                                f.id === "obstructions-found" ||
+                                f.id === "smoke-evacuation" ||
+                                f.id === "ventilation-adequate" ||
+                                f.id === "co-alarm-installed" ||
+                                f.id === "fire-safety-concerns" ||
+                                f.id === "general-appliance-condition",
+                            );
+
+                            // Split into two columns
+                            const leftChecks = checkFields.slice(0, 4);
+                            const rightChecks = checkFields.slice(4);
+
+                            return (
+                              <div key={field.id}>
+                                <div className="mt-2 mb-1 pt-1.5 border-t border-gray-200 first:mt-0 first:pt-0 first:border-t-0">
+                                  <h3 className="text-[11px] font-bold text-gray-900">
+                                    {textWithoutPrefix}
+                                  </h3>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="space-y-1">
+                                    {leftChecks.map((checkField) => {
+                                      const value =
+                                        renderFieldValue(checkField);
+                                      if (!value) return null;
+                                      return (
+                                        <div
+                                          key={checkField.id}
+                                          className="text-[10px]"
+                                        >
+                                          <span className="font-semibold text-gray-700">
+                                            {checkField.properties.label}:
+                                          </span>
+                                          <p className="text-gray-900 mt-0.5">
+                                            {value}
+                                          </p>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="space-y-1">
+                                    {rightChecks.map((checkField) => {
+                                      const value =
+                                        renderFieldValue(checkField);
+                                      if (!value) return null;
+                                      return (
+                                        <div
+                                          key={checkField.id}
+                                          className="text-[10px]"
+                                        >
+                                          <span className="font-semibold text-gray-700">
+                                            {checkField.properties.label}:
+                                          </span>
+                                          <p className="text-gray-900 mt-0.5">
+                                            {value}
+                                          </p>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={field.id}
+                              className="mt-2 mb-1 pt-1.5 border-t border-gray-200 first:mt-0 first:pt-0 first:border-t-0"
+                            >
+                              <h3 className="text-[11px] font-bold text-gray-900">
+                                {textWithoutPrefix}
+                              </h3>
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div
+                              key={field.id}
+                              className="text-[10px] font-medium text-gray-700 mb-0.5"
+                            >
+                              {text}
+                            </div>
+                          );
+                        }
+                      }
+
+                      // Skip individual condition check fields as they're rendered in the section header
+                      if (
+                        field.id === "terminal-condition" ||
+                        field.id === "chimney-pot-condition" ||
+                        field.id === "obstructions-found" ||
+                        field.id === "smoke-evacuation" ||
+                        field.id === "ventilation-adequate" ||
+                        field.id === "co-alarm-installed" ||
+                        field.id === "fire-safety-concerns" ||
+                        field.id === "general-appliance-condition"
+                      ) {
+                        return null;
+                      }
+
+                      const value = renderFieldValue(field);
+                      if (!value) return null;
+
+                      return (
+                        <div key={field.id} className="text-[10px]">
+                          {field.type === "textbox" ? (
+                            <p className="text-gray-900 font-medium">{value}</p>
+                          ) : field.type === "checkbox" ? (
+                            <div className="flex items-start">{value}</div>
+                          ) : (
+                            <div>
+                              {field.properties.label && (
+                                <span className="font-semibold text-gray-700">
+                                  {field.properties.label}:
+                                </span>
+                              )}
+                              <p className="text-gray-900 mt-0.5 whitespace-pre-wrap">
+                                {value}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            ) : (
+              /* User-Created Certificate: Simple Single Column Layout */
+              <div className="border border-gray-300 rounded p-3 mb-2">
+                <div className="space-y-2">
+                  {certificate.fields.map((field) => {
                     const value = renderFieldValue(field);
                     if (!value) return null;
 
                     return (
-                      <div key={field.id} className="text-[10px]">
+                      <div key={field.id} className="text-xs">
                         {field.type === "textbox" ? (
-                          <p className="text-gray-900 font-medium">{value}</p>
+                          <p className="text-gray-900 font-medium text-sm">
+                            {value}
+                          </p>
                         ) : field.type === "checkbox" ? (
                           <div className="flex items-start">{value}</div>
                         ) : (
                           <div>
-                            {field.properties.label && (
+                            {field.properties?.label && (
                               <span className="font-semibold text-gray-700">
                                 {field.properties.label}:
                               </span>
@@ -1039,8 +1078,9 @@ export default function CertificateViewerPage() {
                       </div>
                     );
                   })}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Engineer & Customer Sign-Off Section */}
             <div className="border border-gray-300 rounded p-2 mb-2">
